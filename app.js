@@ -355,9 +355,21 @@
       const c = groupClassRecords.find(x => x.id === classId);
       if (!c || c.instructor_id !== currentUser.id) { toast('You are not assigned to this class'); return; }
     }
+    const eligibleMembership = (S.data.memberships || []).some(ms =>
+      ms.gym_member_id === memberId &&
+      ms.status === 'active' &&
+      ms.start_date <= classDate &&
+      ms.end_date >= classDate &&
+      (S.data.plans || []).some(p => p.id === ms.plan_id && p.includesGroupClasses)
+    );
+    if (!eligibleMembership) {
+      toast('Member needs an active membership that includes group classes on this date');
+      return;
+    }
     const { error } = await db.from('group_class_attendance').insert({class_id:classId,gym_member_id:memberId,session_date:classDate,status:'attended',recorded_by:currentUser.id});
     if (error) {
       if (error.code === '23505') toast('This member is already recorded for this class');
+      else if (error.code === '23514') toast('Member needs an active membership that includes group classes on this date');
       else databaseError(error);
       return;
     }
