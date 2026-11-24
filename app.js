@@ -99,6 +99,7 @@
     return `<div class="bars">${arr.map(a => `<div class="bar"><span class="bv">${fmt ? fmt(a.val) : a.val || ''}</span><i style="height:${Math.max(3, a.val / max * 100)}%"></i><em>${S.dow(a.date)}</em></div>`).join('')}</div>`;
   }
   function row(m, right = '') {
+    if (currentRole === 'trainer') return `<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(m.phone || 'No phone recorded')}</small></div><span class="badge b-none">Member</span></div>`;
     const s = memberStatus(m);
     return `<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(sub(s))} · ${esc(m.phone)}</small></div>${right || badge(s)}</div>`;
   }
@@ -107,6 +108,7 @@
   // ---------- views ----------
   const V = {}, after = {};
   V.home = () => {
+    if (currentRole === 'trainer') return `<div class="dash-head"><div><h2>Trainer dashboard</h2><p>Member directory and training workspace.</p></div><span class="dash-live"><i></i> Live records</span></div><div class="stats"><div class="stat hi"><small>Active member records</small><b>${S.data.members.length}</b><em>Available to view</em></div></div><h3>Member access</h3><p class="mut">You can view member contact details. Financial information, payments, membership pricing and staff controls are not available to trainer accounts.</p><button class="btn block" onclick="go('members')">Open member directory →</button>`;
     const t = S.today(), monthStart = t.slice(0, 7) + '-01';
     const st = S.data.members.map(m => ({ m, s: memberStatus(m) }));
     const active = st.filter(x => x.s.key === 'active').length;
@@ -158,7 +160,7 @@
     ${exp.length ? exp.slice(0, 5).map(x => row(x.m)).join('') : '<div class="empty">Nobody is about to expire.</div>'}
     ${exp.length ? `<button class="btn block ghost" onclick="go('reminders')">Review membership reminders →</button>` : ''}`;
   };
-  V.checkin = () => `<h2>Check-in / out</h2>
+  V.checkin = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Check-in tools are not available to trainer accounts.</div>' : `<h2>Check-in / out</h2>`
     <input id="q" placeholder="Search name or phone…" oninput="drawCI()" autocomplete="off">
     <div id="res"></div>
     <h3>Inside now <span class="pill" id="cnt"></span></h3><div id="inside"></div>`;
@@ -225,13 +227,18 @@
     toast('Checked out'); refresh();
   }
 
-  V.members = () => `<h2>Members <span class="pill">${S.data.members.length}</span></h2>
+  V.members = () => currentRole === 'trainer' ? `<h2>Member directory <span class="pill">${S.data.members.length}</span></h2><p class="mut">View member contact details. Editing, membership and payment records are restricted.</p><input id="q" placeholder="Search by name or phone…" oninput="drawMembers()" autocomplete="off"><div id="res"></div>` : `<h2>Members <span class="pill">${S.data.members.length}</span></h2>
     <input id="q" placeholder="Search members…" oninput="drawMembers()" autocomplete="off">
     <div class="chips" id="chips"></div><div id="res"></div>
     <button class="fab" onclick="openAdd()">+</button>`;
   after.members = () => drawMembers();
   function drawMembers() {
     const q = ($('#q') || {}).value ? $('#q').value.toLowerCase().trim() : '';
+    if (currentRole === 'trainer') {
+      const list = S.data.members.filter(m => !q || m.name.toLowerCase().includes(q) || (m.phone || '').toLowerCase().includes(q)).sort((a,b) => a.name.localeCompare(b.name));
+      $('#res').innerHTML = list.length ? list.map(m => row(m)).join('') : '<div class="empty">No members found.</div>';
+      return;
+    }
     const all = S.data.members.map(m => ({ m, s: memberStatus(m) }));
     const cnt = key => all.filter(x => key === 'all' || x.s.key === key).length;
     $('#chips').innerHTML = [['all', 'All'], ['active', 'Active'], ['expiring', 'Expiring'], ['expired', 'Expired'], ['none', 'No plan']].map(([key, l]) => `<button class="chip ${filter === key ? 'on' : ''}" onclick="setFilter('${key}')">${l} ${cnt(key)}</button>`).join('');
@@ -241,7 +248,7 @@
   }
   function setFilter(f) { filter = f; drawMembers(); }
 
-  V.plans = () => `<h2>Membership plans <span class="pill">${S.data.plans.length}</span></h2>
+  V.plans = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Membership plan management is not available to trainer accounts.</div>' : `<h2>Membership plans <span class="pill">${S.data.plans.length}</span></h2>`
     <p class="mut">Configure the packages Alpha Gym offers. Prices and durations are controlled by management.</p>
     <div id="plans-list"></div>
     ${['owner','manager'].includes(currentRole) ? '<button class="fab" onclick="openPlanForm()">+</button>' : ''}`;
@@ -365,6 +372,7 @@
   }
 
   V.payments = () => {
+    if (currentRole === 'trainer') return '<h2>Access restricted</h2><div class="empty">Financial records are not available to trainer accounts.</div>';
     const t=S.today(), p=[...S.data.payments].sort((a,b)=>b.receivedAt.localeCompare(a.receivedAt));
     const week=S.revenueSince(S.addDays(t,-6)), month=S.revenueSince(t.slice(0,7)+'-01');
     let last='';
@@ -489,7 +497,9 @@
 
   // ---------- modals ----------
   function openMember(id) {
-    const m=S.member(id), s=memberStatus(m), inn=S.isInside(id);
+    const m=S.member(id); if (!m) return;
+    if (currentRole === 'trainer') { modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>Gym member</small></div></div><div class="prev" style="margin-top:14px"><b>Phone</b><br>${esc(m.phone || 'Not provided')}<br><br><b>Email</b><br>${esc(m.email || 'Not provided')}<br><br><b>Member since</b><br>${S.fmtDate(m.joined)}${m.memberNumber ? `<br><br><b>Member number</b><br>${esc(m.memberNumber)}` : ''}</div><button class="btn block ghost" onclick="closeModal()">Close</button>`); return; }
+    const s=memberStatus(m), inn=S.isInside(id);
     const pays=S.data.payments.filter(p=>p.memberId===id).sort((a,b)=>b.receivedAt.localeCompare(a.receivedAt));
     const vis=S.memberVisits(id), memberships=memberMemberships(id);
     const open=S.data.checkins.find(c=>c.memberId===id&&!c.out);
@@ -637,6 +647,7 @@
   }
 
   function openSettings() {
+    if (currentRole === 'trainer') { modal(`<h3>Settings</h3><button class="btn block ghost" onclick="lockApp()">Lock app / Sign out</button>`); return; }
     modal(`<h3>Settings</h3>
       <button class="btn block ghost" onclick="exportMembers()">Export members (CSV)</button>
       <button class="btn block ghost" onclick="exportPay()">Export payments (CSV)</button>
@@ -652,24 +663,30 @@
   function refresh() { if (route === 'checkin') drawCI(); else if (route === 'members') drawMembers(); else render(); }
   function render() {
     $('#view').innerHTML = V[route](); if (after[route]) after[route]();
-    $('#tabs').innerHTML = TABS.filter(([r]) => r!=='staff' || currentRole==='owner').map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
+    const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','members'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
+    $('#tabs').innerHTML = visibleTabs.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
   }
-  function go(r) { route = r; location.hash = r; render(); scrollTo(0, 0); }
+  function go(r) { if (currentRole === 'trainer' && !['home','members'].includes(r)) r = 'home'; route = r; location.hash = r; render(); scrollTo(0, 0); }
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
-    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]); }
+    try {
+      if (currentRole === 'trainer') await loadMembersFromDatabase();
+      else await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]);
+    }
     catch (error) {
       databaseError(error);
       $('#view').innerHTML = '<div class="empty">Could not load core Alpha Gym records. Check your connection and reload.</div>';
       return;
     }
     // Attendance is loaded from the database; an attendance read failure must not blank the whole management portal.
-    try { await loadAttendanceFromDatabase(); }
-    catch (error) { databaseError(error); S.data.checkins = []; }
-    // Payments are secondary data: a payment-query issue must never prevent the management shell from opening.
-    try { await loadPaymentsFromDatabase(); }
-    catch (error) { console.error('Alpha Gym payments could not be loaded:', error); S.data.payments = []; }
+    if (currentRole !== 'trainer') {
+      try { await loadAttendanceFromDatabase(); }
+      catch (error) { databaseError(error); S.data.checkins = []; }
+      // Payments are secondary data: a payment-query issue must never prevent the management shell from opening.
+      try { await loadPaymentsFromDatabase(); }
+      catch (error) { console.error('Alpha Gym payments could not be loaded:', error); S.data.payments = []; }
+    }
     $('#brand').innerHTML = esc(S.CONFIG.gym).replace(/^(\S+)/, '<span>$1</span>');
     $('#date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
     const h = location.hash.slice(1); if (V[h]) route = h;
