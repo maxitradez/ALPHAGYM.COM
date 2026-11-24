@@ -229,7 +229,7 @@
       ${p.length ? p.slice(0,100).map(x=>{
         const m=S.member(x.memberId); if(!m)return '';
         const plan=S.plan(x.planId), head=x.paid!==last ? `<h3 style="font-size:.85rem;color:var(--mut)">${S.fmtDate(x.paid)}${x.paid===t?' · Today':''}</h3>` : ''; last=x.paid;
-        return head+`<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(plan?.name || 'Membership payment')} · ${esc(x.method.toUpperCase())}${x.code?' · '+esc(x.code):''}</small></div><div class="right"><b>${S.money(x.amount)}</b></div></div>`;
+        return head+`<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)} ${x.isVoided?'<span class="badge b-expired">Reversed</span>':''}</b><small>${esc(plan?.name || 'Membership payment')} · ${esc(x.method.toUpperCase())}${x.code?' · '+esc(x.code):''}</small></div><div class="right"><b>${S.money(x.amount)}</b></div></div>`;
       }).join('') : '<div class="empty">No payments recorded yet.</div>'}`;
   };
   function exportMembers() {
