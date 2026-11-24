@@ -1,6 +1,25 @@
 (function () {
   const S = Store, $ = s => document.querySelector(s), esc = S.esc;
-  let route = 'home', filter = 'all';
+  let route = 'home', filter = 'all', currentUser = null;
+  const db = window.alphaSupabase;
+
+  async function loadMembersFromDatabase() {
+    const { data, error } = await db.from('gym_members')
+      .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at')
+      .eq('record_status', 'active')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    S.data.members = (data || []).map(m => ({
+      id: m.id, memberNumber: m.member_number, name: m.full_name,
+      phone: m.phone, email: m.email || '', joined: m.joined_on,
+      recordStatus: m.record_status
+    }));
+  }
+
+  function databaseError(error) {
+    console.error('Alpha Gym database error:', error);
+    toast(error && error.message ? error.message : 'Database request failed');
+  }
   const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['payments', '04', 'Payments'], ['reminders', '05', 'Reminders']];
 
   // ---------- helpers ----------
@@ -143,6 +162,7 @@
     modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>${esc(m.phone)}${m.email ? ' · ' + esc(m.email) : ''}</small></div>${badge(s)}</div>
       <div class="prev" style="margin-top:14px">${s.key === 'none' ? 'No membership yet.' : `Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
       <div class="acts">
+        <button class="btn" onclick="editMember('${id}')">Edit member</button>
         <button class="btn" onclick="openPay('${id}')">Add payment</button>
         ${inn ? `<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>` : `<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
         <a class="btn wa" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}">WhatsApp</a>
@@ -150,9 +170,41 @@
       </div>
       <h3>Payment history</h3>${pays.length ? pays.slice(0, 5).map(p => `<div class="row"><div class="grow"><b>${S.money(p.amount)} · ${esc(S.plan(p.planId).name)}</b><small>${S.fmtDate(p.paid)} · ${p.method}${p.code ? ' ' + esc(p.code) : ''} · until ${S.fmtDate(p.end)}</small></div></div>`).join('') : '<div class="empty">No payments yet.</div>'}
       <h3>Recent visits</h3>${vis.length ? vis.slice(0, 5).map(c => `<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(c.in))}</b><small>${S.fmtTime(c.in)} → ${c.out ? S.fmtTime(c.out) : 'inside'}</small></div></div>`).join('') : '<div class="empty">No visits yet.</div>'}
-      <button class="btn block ghost" style="color:var(--red)" onclick="delMember('${id}')">Delete member</button>`);
+      <button class="btn block ghost" style="color:var(--red)" onclick="delMember('${id}')">Archive member</button>`);
   }
-  function delMember(id) { if (confirm('Delete this member and all their records?')) { S.deleteMember(id); closeModal(); toast('Member deleted'); refresh(); } }
+  async function delMember(id) {
+    if (!confirm('Archive this member? Their history will be retained.')) return;
+    const { error } = await db.from('gym_members')
+      .update({ record_status: 'archived', updated_by: currentUser.id })
+      .eq('id', id);
+    if (error) { databaseError(error); return; }
+    await loadMembersFromDatabase();
+    closeModal(); toast('Member archived'); refresh();
+  }
+
+  function editMember(id) {
+    const m = S.member(id);
+    if (!m) return;
+    modal(`<h3>Edit member</h3>
+      <label>Full name</label><input id="edit-n" value="${esc(m.name)}" autocomplete="off">
+      <label>Phone</label><input id="edit-p" type="tel" value="${esc(m.phone)}">
+      <label>Email (optional)</label><input id="edit-e" type="email" value="${esc(m.email || '')}">
+      <button class="btn block" onclick="saveEditMember('${id}')">Save changes</button>
+      <button class="btn block ghost" onclick="openMember('${id}')">Cancel</button>`);
+  }
+
+  async function saveEditMember(id) {
+    const name = $('#edit-n').value.trim(), phone = $('#edit-p').value.trim();
+    const email = $('#edit-e').value.trim();
+    if (!name || phone.replace(/\D/g, '').length < 9) { toast('Enter a name and valid phone'); return; }
+    const { error } = await db.from('gym_members').update({
+      full_name: name, phone: S.normPhone(phone), email: email || null,
+      updated_by: currentUser.id
+    }).eq('id', id);
+    if (error) { databaseError(error); return; }
+    await loadMembersFromDatabase();
+    closeModal(); toast('Member updated'); refresh();
+  }
 
   function openAdd() {
     modal(`<h3>New member</h3>
@@ -167,9 +219,18 @@
   function saveMember() {
     const n = $('#n').value.trim(), p = $('#p').value.trim();
     if (!n || p.replace(/\D/g, '').length < 9) { toast('Enter a name and valid phone'); return; }
-    const m = S.addMember({ name: n, phone: p, email: $('#e').value });
-    const plan = $('#pl').value; if (plan) S.addPayment(m.id, plan, $('#me').value, $('#c').value);
-    closeModal(); toast('Member added'); refresh();
+    const email = $('#e').value.trim();
+    const { data, error } = await db.from('gym_members').insert({
+      full_name: n, phone: S.normPhone(p), email: email || null,
+      created_by: currentUser.id, updated_by: currentUser.id
+    }).select('id,member_number,full_name,phone,email,joined_on,record_status,created_at').single();
+    if (error) { databaseError(error); return; }
+    S.data.members.unshift({
+      id: data.id, memberNumber: data.member_number, name: data.full_name,
+      phone: data.phone, email: data.email || '', joined: data.joined_on,
+      recordStatus: data.record_status
+    });
+    closeModal(); toast('Member saved to Alpha Gym database'); refresh();
   }
 
   function openPay(id, thenIn) {
@@ -215,8 +276,15 @@
     $('#tabs').innerHTML = TABS.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
   }
   function go(r) { route = r; location.hash = r; render(); scrollTo(0, 0); }
-  function boot() {
+  async function boot() {
     $('#gate').innerHTML = '';
+    $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
+    try { await loadMembersFromDatabase(); }
+    catch (error) {
+      databaseError(error);
+      $('#view').innerHTML = '<div class="empty">Could not load member records from the Alpha Gym database. Check your connection and reload.</div>';
+      return;
+    }
     $('#brand').innerHTML = esc(S.CONFIG.gym).replace(/^(\S+)/, '<span>$1</span>');
     $('#date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
     const h = location.hash.slice(1); if (V[h]) route = h;
@@ -247,8 +315,9 @@
       showGate('This account does not have management access. Contact the gym owner.');
       return;
     }
+    currentUser = data.user;
     sessionStorage.setItem('adm', '1');
-    boot();
+    await boot();
   }
   async function forgotPassword() {
     const email = ($('#owner-email') || {}).value?.trim() || '';
@@ -265,14 +334,15 @@
     if (session) {
       const { data: profile, error } = await window.alphaSupabase.from('profiles').select('role').eq('id', session.user.id).single();
       if (!error && profile && ['owner','manager','receptionist','trainer'].includes(profile.role)) {
-        sessionStorage.setItem('adm','1'); boot(); return;
+        currentUser = session.user;
+        sessionStorage.setItem('adm','1'); await boot(); return;
       }
       await window.alphaSupabase.auth.signOut();
     }
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, doIn, doOut, forceIn, setFilter, openMember, delMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
+  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate();
 })();
