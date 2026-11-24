@@ -32,7 +32,7 @@ body.app{padding-bottom:84px}
 .top b{font-size:1.05rem}.top b span{color:var(--acc)}
 .top .date{font-size:.75rem;color:var(--mut)}
 #view{padding:16px;max-width:720px;margin:0 auto}
-.tabs{position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(20,24,29,.97);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.tabs{position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(20,24,29,.97);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,minmax(0,1fr));padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
 .tabs button{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.68rem;color:var(--mut);padding:6px 0;border-radius:10px}
 .tabs button i{font-style:normal;font-size:1.25rem}
 .tabs button.on{color:var(--acc)}
@@ -124,3 +124,5 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .sw:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
 .sw.on{background:var(--acc)}.sw.on:after{left:23px;background:#0b0d10}
 .err{color:var(--red);font-size:.85rem;margin-bottom:8px}
+
+@media(max-width:420px){.tabs{grid-template-columns:repeat(6,minmax(58px,1fr));overflow-x:auto;justify-content:start}.tabs button{white-space:nowrap;font-size:.62rem}}
