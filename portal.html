@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0d10">
+<title>Member Portal</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="nav"><div class="wrap"><a class="logo" href="index.html" id="logo"></a><nav><a href="index.html">← Website</a></nav></div></div>
+<div class="pwrap" id="root"></div>
+<div id="modal" onclick="if(event.target===this)this.classList.remove('open')"></div>
+<script src="store.js"></script>
+<script>
+const S = Store, esc = S.esc, root = document.getElementById('root');
+document.title = 'Member Portal · ' + S.CONFIG.gym;
+document.getElementById('logo').innerHTML = esc(S.CONFIG.gym).replace(/^(\S+)/, '<span>$1</span>');
+let mode = 'login', err = '';
+
+function authView() {
+  root.innerHTML = `<h2 style="margin-top:20px">${mode === 'login' ? 'Welcome back 👋' : 'Join ' + esc(S.CONFIG.gym)}</h2>
+  <p class="mut" style="margin-bottom:16px">${mode === 'login' ? 'Check your membership, payments and visits.' : 'Create an account to get membership reminders by email.'}</p>
+  <div class="tabs2"><button class="${mode === 'login' ? 'on' : ''}" onclick="mode='login';err='';authView()">Log in</button><button class="${mode === 'signup' ? 'on' : ''}" onclick="mode='signup';err='';authView()">Sign up</button></div>
+  <div class="demo">Demo: log in as <b>demo@member.com</b> / <b>demo123</b> <button class="btn sm" style="margin-left:6px" onclick="demo()">Fill</button></div>
+  ${mode === 'signup' ? '<label>Full name</label><input id="n" autocomplete="name"><label>Phone</label><input id="p" type="tel" placeholder="07xx xxx xxx">' : ''}
+  <label>Email</label><input id="e" type="email" autocomplete="email">
+  <label>Password</label><input id="w" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')submit()">
+  <div class="err">${err}</div>
+  <button class="btn block" onclick="submit()">${mode === 'login' ? 'Log in' : 'Create account'}</button>`;
+}
+function demo() { document.getElementById('e').value = 'demo@member.com'; document.getElementById('w').value = 'demo123'; }
+function submit() {
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const r = mode === 'login' ? S.login(g('e'), g('w')) : (!g('n').trim() || g('p').replace(/\D/g, '').length < 9 || !g('e').includes('@') ? { err: 'Fill in name, phone and a valid email.' } : S.signup({ name: g('n'), phone: g('p'), email: g('e'), pass: g('w') }));
+  if (r.err) { err = r.err; authView(); return; }
+  err = ''; home();
+}
+function home() {
+  const m = S.member(S.session()); if (!m) { S.logout(); return authView(); }
+  const s = S.status(m), pays = S.memberPayments(m.id), vis = S.memberVisits(m.id), last = pays[0];
+  const month = S.today().slice(0, 7), mv = vis.filter(c => S.ymd(c.in).startsWith(month)).length;
+  const days = last ? S.plan(last.planId).days : 30, pct = s.left > 0 ? Math.min(1, s.left / days) : 0, C = 2 * Math.PI * 52;
+  const col = { active: 'var(--grn)', expiring: 'var(--amb)', expired: 'var(--red)', none: 'var(--mut)' }[s.key];
+  root.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 14px"><div><small>Hello,</small><h2 style="margin:0">${esc(m.name.split(' ')[0])} 💪</h2></div><button class="btn ghost sm" onclick="S.logout();authView()">Log out</button></div>
+  <div class="card" style="text-align:center">
+    <div class="ring"><svg width="150" height="150" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="var(--line)" stroke-width="10"/><circle cx="60" cy="60" r="52" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${pct * C} ${C}"/></svg>
+      <div><b style="color:${col}">${s.key === 'none' ? '—' : Math.max(0, s.left)}</b><small>${s.key === 'none' ? 'no plan' : 'days left'}</small></div></div>
+    <span class="badge b-${s.key}">${s.label}</span>
+    <p class="mut" style="margin:8px 0 14px">${s.key === 'none' ? 'You have no membership yet.' : (s.left < 0 ? 'Expired on ' : 'Valid until ') + '<b style="color:var(--txt)">' + S.fmtDate(s.end) + '</b>'}</p>
+    <button class="btn block" onclick="renew()">${s.key === 'active' ? 'Extend membership' : 'Renew membership'}</button>
+  </div>
+  <div class="sum" style="margin-top:12px"><div><b>${mv}</b><small>Visits this month</small></div><div><b>${vis.length}</b><small>Total visits</small></div><div><b>${vis[0] ? S.fmtDate(S.ymd(vis[0].in)).slice(0, 6) : '—'}</b><small>Last visit</small></div></div>
+  <h3>Reminders</h3><div class="card">
+    <div class="tog"><span>📧 Email reminders<br><small>${esc(m.email || 'no email')} · ${S.CONFIG.reminderDays} days before expiry</small></span><button class="sw ${m.prefs.email ? 'on' : ''}" onclick="tg('email')"></button></div>
+    <div class="tog" style="border:0"><span>💬 WhatsApp reminders<br><small>${esc(m.phone)}</small></span><button class="sw ${m.prefs.whatsapp ? 'on' : ''}" onclick="tg('whatsapp')"></button></div></div>
+  <h3>Payment history</h3>${pays.length ? pays.slice(0, 6).map(p => `<div class="row"><div class="grow"><b>${S.money(p.amount)} · ${esc(S.plan(p.planId).name)}</b><small>${S.fmtDate(p.paid)} · ${p.method}${p.code ? ' · ' + esc(p.code) : ''}</small></div><small>→ ${S.fmtDate(p.end).slice(0, 6)}</small></div>`).join('') : '<div class="empty">No payments yet.</div>'}
+  <h3>Recent visits</h3>${vis.length ? vis.slice(0, 5).map(c => `<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(c.in))}</b><small>${S.fmtTime(c.in)} → ${c.out ? S.fmtTime(c.out) : 'inside now'}</small></div></div>`).join('') : '<div class="empty">No visits yet.</div>'}`;
+}
+function tg(k) { const m = S.member(S.session()); m.prefs[k] = !m.prefs[k]; S.save(); home(); }
+function renew() {
+  const el = document.getElementById('modal');
+  el.innerHTML = `<div class="sheet"><h3>Renew via M-Pesa</h3><div class="prev"><b>1.</b> Go to M-Pesa → Lipa na M-Pesa → Buy Goods<br><b>2.</b> Till number: <b style="color:var(--acc);font-size:1.2rem">${esc(S.CONFIG.till)}</b><br><b>3.</b> Enter the plan amount and send<br><b>4.</b> Show the confirmation at the desk — your membership updates instantly.</div>
+  ${S.data.plans.map(p => `<div class="row"><div class="grow"><b>${esc(p.name)}</b><small>${p.days} day${p.days > 1 ? 's' : ''}</small></div><b>${S.money(p.price)}</b></div>`).join('')}
+  <button class="btn block ghost" onclick="document.getElementById('modal').classList.remove('open')">Close</button></div>`;
+  el.classList.add('open');
+}
+S.session() && S.member(S.session()) ? home() : authView();
+</script>
+</body>
+</html>

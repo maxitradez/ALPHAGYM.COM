@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Owner App · IronForge</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="app">
+<div id="gate"></div>
+<header class="top">
+  <div><b id="brand"></b><div class="date" id="date"></div></div>
+  <button class="btn ghost sm" onclick="openSettings()">⚙️</button>
+</header>
+<main id="view"></main>
+<nav class="tabs" id="tabs"></nav>
+<div id="modal" onclick="if(event.target===this)closeModal()"></div>
+<div id="toast"></div>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
