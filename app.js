@@ -1,6 +1,7 @@
 (function () {
   const S = Store, $ = s => document.querySelector(s), esc = S.esc;
   let route = 'home', filter = 'all', currentUser = null, currentRole = null;
+  let reportFrom = S.today().slice(0, 7) + '-01', reportTo = S.today();
   const db = window.alphaSupabase;
 
   async function loadPlansFromDatabase() {
@@ -70,7 +71,7 @@
     console.error('Alpha Gym database error:', error);
     toast(error && error.message ? error.message : 'Database request failed');
   }
-  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reminders', '06', 'Reminders'], ['staff', '07', 'Staff']];
+  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reports', '06', 'Reports'], ['reminders', '07', 'Reminders'], ['staff', '08', 'Staff']];
 
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -376,6 +377,88 @@
         return head+`<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)} ${x.isVoided?'<span class="badge b-expired">Reversed</span>':''}</b><small>${esc(plan?.name || 'Membership payment')} · ${esc(x.method.toUpperCase())}${x.code?' · '+esc(x.code):''}</small></div><div class="right"><b>${S.money(x.amount)}</b></div></div>`;
       }).join('') : '<div class="empty">No payments recorded yet.</div>'}`;
   };
+
+  // ---------- reports ----------
+  V.reports = () => {
+    if (!['owner', 'manager'].includes(currentRole)) return '<h2>Reports</h2><div class="empty">Reports are available to the owner and manager only.</div>';
+    return `<div class="report-head"><div><h2>Reports</h2><p class="mut">Review Alpha Gym activity and export records.</p></div></div>
+      <div class="report-filters">
+        <div><label for="report-from">From</label><input id="report-from" type="date" value="${reportFrom}" onchange="drawReports()"></div>
+        <div><label for="report-to">To</label><input id="report-to" type="date" value="${reportTo}" onchange="drawReports()"></div>
+      </div>
+      <p class="report-note">The date range filters registrations, payments and attendance. Outstanding balances show the current unpaid amount across memberships.</p>
+      <div id="reports-content"></div>`;
+  };
+  after.reports = () => drawReports();
+
+  function reportDate(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function reportData() {
+    const from = reportFrom, to = reportTo;
+    const members = S.data.members.filter(m => m.joined >= from && m.joined <= to);
+    const payments = S.data.payments.filter(p => p.paid >= from && p.paid <= to).sort((a,b) => b.receivedAt.localeCompare(a.receivedAt));
+    const attendance = S.data.checkins.filter(c => {
+      const d = reportDate(c.in);
+      return d >= from && d <= to;
+    }).sort((a,b) => b.in.localeCompare(a.in));
+    const balances = (S.data.memberships || []).filter(ms => ms.status !== 'cancelled' && S.member(ms.gym_member_id))
+      .map(ms => ({ ms, member: S.member(ms.gym_member_id), plan: S.plan(ms.plan_id), due: membershipBalance(ms) }))
+      .filter(x => x.due > 0).sort((a,b) => b.due - a.due);
+    return { members, payments, attendance, balances };
+  }
+  function drawReports() {
+    const host = $('#reports-content');
+    if (!host) return;
+    const fromEl = $('#report-from'), toEl = $('#report-to');
+    if (fromEl && fromEl.value) reportFrom = fromEl.value;
+    if (toEl && toEl.value) reportTo = toEl.value;
+    if (reportFrom > reportTo) {
+      host.innerHTML = '<div class="empty">The start date must be on or before the end date.</div>';
+      return;
+    }
+    const d = reportData();
+    const validPayments = d.payments.filter(p => !p.isVoided);
+    const netRevenue = validPayments.reduce((sum,p) => sum + Number(p.amount || 0), 0);
+    const reversed = d.payments.filter(p => p.isVoided).reduce((sum,p) => sum + Number(p.amount || 0), 0);
+    const dueTotal = d.balances.reduce((sum,x) => sum + x.due, 0);
+    const activeNow = S.data.members.filter(m => memberStatus(m).key === 'active').length;
+    const insideNow = S.inside().length;
+    const preview = (items, renderRow, empty) => items.length ? items.slice(0,30).map(renderRow).join('') + (items.length > 30 ? '<p class="report-note">Showing the latest 30 of ' + items.length + ' records. Export CSV for the full list.</p>' : '') : '<div class="empty">' + empty + '</div>';
+    host.innerHTML = `
+      <section class="report-card">
+        <div class="report-title"><div><h3>Membership report</h3><p class="mut">New registrations in the selected period</p></div><button class="btn sm ghost" onclick="exportReport('members')">Export CSV</button></div>
+        <div class="report-kpis"><div><b>${d.members.length}</b><small>New registrations</small></div><div><b>${activeNow}</b><small>Active now</small></div></div>
+        ${preview(d.members, m => '<div class="report-row"><div><b>'+esc(m.name)+'</b><small>'+esc(m.phone)+' · Joined '+S.fmtDate(m.joined)+'</small></div><span class="badge b-'+memberStatus(m).key+'">'+esc(memberStatus(m).label)+'</span></div>', 'No registrations in this date range.')}
+      </section>
+      <section class="report-card">
+        <div class="report-title"><div><h3>Payments report</h3><p class="mut">Recorded payments, excluding reversals from net revenue</p></div><button class="btn sm ghost" onclick="exportReport('payments')">Export CSV</button></div>
+        <div class="report-kpis"><div><b>${S.money(netRevenue)}</b><small>Net collected</small></div><div><b>${S.money(reversed)}</b><small>Reversed</small></div><div><b>${validPayments.length}</b><small>Valid payments</small></div></div>
+        ${preview(d.payments, p => { const m=S.member(p.memberId)||{}; return '<div class="report-row"><div><b>'+esc(m.name||'Member record unavailable')+'</b><small>'+S.fmtDate(p.paid)+' · '+esc(String(p.method||'').toUpperCase())+(p.isVoided?' · Reversed':'')+'</small></div><b>'+S.money(p.amount)+'</b></div>'; }, 'No payments in this date range.')}
+      </section>
+      <section class="report-card">
+        <div class="report-title"><div><h3>Outstanding balances</h3><p class="mut">Current unpaid membership balances</p></div><button class="btn sm ghost" onclick="exportReport('balances')">Export CSV</button></div>
+        <div class="report-kpis"><div><b>${S.money(dueTotal)}</b><small>Total outstanding</small></div><div><b>${d.balances.length}</b><small>Membership balances</small></div></div>
+        ${preview(d.balances, x => '<div class="report-row"><div><b>'+esc(x.member.name)+'</b><small>'+esc(x.plan?.name||'Membership')+' · '+S.fmtDate(x.ms.start_date)+' – '+S.fmtDate(x.ms.end_date)+'</small></div><b>'+S.money(x.due)+'</b></div>', 'No outstanding membership balances.')}
+      </section>
+      <section class="report-card">
+        <div class="report-title"><div><h3>Attendance report</h3><p class="mut">Check-in sessions during the selected period</p></div><button class="btn sm ghost" onclick="exportReport('attendance')">Export CSV</button></div>
+        <div class="report-kpis"><div><b>${d.attendance.length}</b><small>Visits in period</small></div><div><b>${insideNow}</b><small>Inside now</small></div></div>
+        ${preview(d.attendance, c => { const m=S.member(c.memberId)||{}; return '<div class="report-row"><div><b>'+esc(m.name||'Member record unavailable')+'</b><small>'+S.fmtDate(reportDate(c.in))+' · '+S.fmtTime(c.in)+' → '+(c.out?S.fmtTime(c.out):'Still inside')+'</small></div><span class="badge '+(c.out?'b-none':'b-active')+'">'+(c.out?'Completed':'Inside')+'</span></div>'; }, 'No attendance sessions in this date range.')}
+      </section>`;
+  }
+  function exportReport(type) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Reports are available to the owner and manager only'); return; }
+    const d = reportData();
+    if (type === 'members') download('alpha-gym-memberships.csv', [['Member','Phone','Email','Joined','Membership status','Expiry'], ...d.members.map(m => { const s=memberStatus(m); return [m.name,m.phone,m.email,m.joined,s.label,s.end||'']; })]);
+    else if (type === 'payments') download('alpha-gym-payments.csv', [['Date','Member','Phone','Plan','Amount KES','Method','Reference','Status','Reversal reason','Notes'], ...d.payments.map(p => { const m=S.member(p.memberId)||{}; return [p.paid,m.name||'',m.phone||'',S.plan(p.planId)?.name||'',p.amount,p.method,p.code,p.isVoided?'Reversed':'Recorded',p.voidReason,p.notes]; })]);
+    else if (type === 'balances') download('alpha-gym-outstanding-balances.csv', [['Member','Phone','Plan','Membership start','Membership end','Amount due KES'], ...d.balances.map(x => [x.member.name,x.member.phone,x.plan?.name||'',x.ms.start_date,x.ms.end_date,x.due])]);
+    else if (type === 'attendance') download('alpha-gym-attendance.csv', [['Member','Phone','Date','Check-in','Check-out','Status'], ...d.attendance.map(c => { const m=S.member(c.memberId)||{}; return [m.name||'',m.phone||'',reportDate(c.in),S.fmtTime(c.in),c.out?S.fmtTime(c.out):'',c.out?'Completed':'Still inside']; })]);
+  }
+
   function exportMembers() {
     const rows = [['Name', 'Phone', 'Email', 'Joined', 'Membership status', 'Membership expiry', 'Visits']];
     S.data.members.forEach(m => {
@@ -644,7 +727,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff });
+  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
