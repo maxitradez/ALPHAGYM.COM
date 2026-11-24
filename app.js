@@ -88,7 +88,7 @@
     if (current.status === 'pending') return {key:'pending',label:'Pending',left:null,end:current.end_date};
     if (current.status === 'cancelled') return {key:'expired',label:'Cancelled',left:-1,end:current.end_date};
     const left=S.diff(S.today(),current.end_date);
-    return {key:left<0?'expired':left<=S.CONFIG.reminderDays?'expiring':'active',label:left<0?'Expired':left===0?'Expiring':'Active',left,end:current.end_date};
+    return {key:left<0?'expired':left<=S.CONFIG.reminderDays?'expiring':'active',label:left<0?'Expired':left<=S.CONFIG.reminderDays?'Expiring':'Active',left,end:current.end_date};
   }
   const k = v => v ? (v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'k' : v) : '';
   function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200); }
@@ -169,9 +169,29 @@
     const q = ($('#q') || {}).value ? $('#q').value.toLowerCase().trim() : '';
     const list = q ? S.data.members.filter(m => m.name.toLowerCase().includes(q) || m.phone.includes(q)).slice(0, 8) : [];
     $('#res').innerHTML = q ? (list.length ? list.map(m => {
-      const inn = S.isInside(m.id);
-      return row(m, inn ? `<button class="btn sm red" onclick="event.stopPropagation();doOut('${S.data.checkins.find(c => c.memberId === m.id && !c.out).id}')">Out</button>`
-        : `<button class="btn sm" onclick="event.stopPropagation();doIn('${m.id}')">Check in</button>`);
+      const inn = S.isInside(m.id), status = memberStatus(m);
+      const visits = S.memberVisits(m.id), lastVisit = visits[0];
+      const lastVisitText = lastVisit ? S.fmtDate(S.ymd(lastVisit.in)) + ' · ' + S.fmtTime(lastVisit.in) : 'No previous visits';
+      let action = '';
+      if (inn) {
+        const openVisit = S.data.checkins.find(c => c.memberId === m.id && !c.out);
+        action = `<button class="btn sm red" onclick="event.stopPropagation();doOut('${openVisit.id}')">Check out</button>`;
+      } else if (['active','expiring'].includes(status.key)) {
+        action = `<button class="btn sm" onclick="event.stopPropagation();doIn('${m.id}')">Check in</button>`;
+      } else if (['expired','none'].includes(status.key) && currentRole === 'owner') {
+        action = `<button class="btn sm" onclick="event.stopPropagation();doIn('${m.id}')">Review access</button>`;
+      } else if (['expired','none'].includes(status.key) && ['manager','receptionist'].includes(currentRole)) {
+        action = `<button class="btn sm" onclick="event.stopPropagation();openAssign('${m.id}')">Renew membership</button>`;
+      } else {
+        action = '<button class="btn sm" disabled>Not eligible</button>';
+      }
+      return `<div class="row" onclick="openMember('${m.id}')">
+        <div class="av">${ini(m.name)}</div>
+        <div class="grow"><b>${esc(m.name)}</b><small>${esc(m.phone || 'No phone recorded')}</small>
+          <small>Membership: ${badge(status)} · ${esc(sub(status))}</small>
+          <small>Last visit: ${esc(lastVisitText)}</small>
+        </div>${action}
+      </div>`;
     }).join('') : '<div class="empty">No match. <a style="color:var(--acc)" href="#" onclick="openAdd();return false">Add as new member</a></div>') : '<div class="empty">Type a name or phone number to check someone in.</div>';
     const ins = S.inside();
     $('#cnt').textContent = ins.length;
@@ -181,10 +201,10 @@
       return `<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>In at ${S.fmtTime(c.in)} · ${mins} min</small></div><button class="btn sm red" onclick="event.stopPropagation();doOut('${c.id}')">Check out</button></div>`;
     }).join('') : '<div class="empty">Gym is empty right now.</div>';
   }
-  async function createAttendanceSession(id, label) {
+  async function createAttendanceSession(id, label, notes = null) {
     if (S.isInside(id)) { toast('Already inside'); return false; }
     const { data, error } = await db.from('attendance_sessions').insert({
-      gym_member_id: id, check_in_method: 'manual', check_in_by: currentUser.id
+      gym_member_id: id, check_in_method: 'manual', check_in_by: currentUser.id, notes
     }).select('id,gym_member_id,checked_in_at,checked_out_at,check_in_method,check_in_by,check_out_by').single();
     if (error) {
       if (error.code === '23505') toast('This member already has an open check-in');
@@ -204,15 +224,24 @@
     const s = memberStatus(m);
     if (S.isInside(id)) { toast('Already inside'); return; }
     if (s.key === 'expired' || s.key === 'none') {
-      modal(`<h3>${esc(m.name)}</h3><p class="mut" style="margin:6px 0 14px">${s.key === 'none' ? 'No membership yet.' : 'Membership expired on ' + S.fmtDate(s.end) + '.'}</p>
-        <button class="btn block" onclick="openPay('${id}',true)">Renew &amp; check in</button>
-        <button class="btn block ghost" onclick="forceIn('${id}')">Let in anyway</button>
+      const canOverride = currentRole === 'owner';
+      modal(`<h3>${esc(m.name)}</h3>
+        <p class="mut" style="margin:6px 0 14px">${s.key === 'none' ? 'This member has no membership.' : 'Membership expired on ' + S.fmtDate(s.end) + '.'}</p>
+        <button class="btn block" onclick="closeModal();openAssign('${id}')">Assign / renew membership</button>
+        ${canOverride ? '<label for="override-reason">Owner override reason (required)</label><textarea id="override-reason" rows="3" maxlength="500" placeholder="Explain why this member is being admitted without an active membership"></textarea><button class="btn block ghost" onclick="forceIn(\'' + id + '\')">Owner override &amp; check in</button>' : '<p class="mut">Check-in is blocked until a valid membership is assigned. Only the gym owner can authorize an override.</p>'}
         <button class="btn block ghost" onclick="closeModal()">Cancel</button>`); return;
+    }
+    if (!['active','expiring'].includes(s.key)) {
+      toast('This membership is not eligible for check-in. Contact the gym owner.');
+      return;
     }
     await createAttendanceSession(id, `${m.name} checked in` + (s.key === 'expiring' ? ` · ${s.left === 0 ? 'ends today' : s.left + 'd left'}` : ''));
   }
   async function forceIn(id) {
-    const saved = await createAttendanceSession(id, 'Checked in (expired membership override)');
+    if (currentRole !== 'owner') { toast('Only the gym owner can override membership restrictions'); return; }
+    const reason = ($('#override-reason') || {}).value?.trim() || '';
+    if (reason.length < 5) { toast('Enter an override reason (at least 5 characters)'); return; }
+    const saved = await createAttendanceSession(id, 'Owner-approved membership override', 'OWNER_OVERRIDE: ' + reason);
     if (saved) closeModal();
   }
   async function doOut(cid) {
