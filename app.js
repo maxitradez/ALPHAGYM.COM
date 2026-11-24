@@ -210,10 +210,8 @@
     modal(`<h3>New member</h3>
       <label>Full name</label><input id="n" placeholder="e.g. John Mwangi" autocomplete="off">
       <label>Phone</label><input id="p" type="tel" placeholder="07xx xxx xxx">
-      <label>Email (optional, for reminders)</label><input id="e" type="email" placeholder="name@email.com">
-      <label>First plan</label><select id="pl"><option value="">— No plan yet —</option>${S.data.plans.map(p => `<option value="${p.id}" ${p.id === 'monthly' ? 'selected' : ''}>${esc(p.name)} · ${S.money(p.price)}</option>`).join('')}</select>
-      <label>Paid by</label><select id="me" onchange="$('#cw').style.display=this.value==='M-Pesa'?'block':'none'"><option>M-Pesa</option><option>Cash</option></select>
-      <div id="cw"><label>M-Pesa code</label><input id="c" placeholder="e.g. SHK3L9XQ2P" style="text-transform:uppercase"></div>
+      <label>Email (optional)</label><input id="e" type="email" placeholder="name@email.com">
+      <p class="mut" style="font-size:.8rem;margin:12px 0">A member can be registered without an email or portal account. Membership and payment details will be added in their own connected module.</p>
       <button class="btn block" onclick="saveMember()">Save member</button>`);
   }
   async function saveMember() {
