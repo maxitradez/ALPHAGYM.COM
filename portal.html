@@ -20,17 +20,15 @@ document.getElementById('logo').innerHTML = esc(S.CONFIG.gym).replace(/^(\S+)/, 
 let mode = 'login', err = '';
 
 function authView() {
-  root.innerHTML = `<h2 style="margin-top:20px">${mode === 'login' ? 'Welcome back 👋' : 'Join ' + esc(S.CONFIG.gym)}</h2>
+  root.innerHTML = `<h2 style="margin-top:20px">${mode === 'login' ? 'Welcome back' : 'Join ' + esc(S.CONFIG.gym)}</h2>
   <p class="mut" style="margin-bottom:16px">${mode === 'login' ? 'Check your membership, payments and visits.' : 'Create an account to get membership reminders by email.'}</p>
   <div class="tabs2"><button class="${mode === 'login' ? 'on' : ''}" onclick="mode='login';err='';authView()">Log in</button><button class="${mode === 'signup' ? 'on' : ''}" onclick="mode='signup';err='';authView()">Sign up</button></div>
-  <div class="demo">Demo: log in as <b>demo@member.com</b> / <b>demo123</b> <button class="btn sm" style="margin-left:6px" onclick="demo()">Fill</button></div>
   ${mode === 'signup' ? '<label>Full name</label><input id="n" autocomplete="name"><label>Phone</label><input id="p" type="tel" placeholder="07xx xxx xxx">' : ''}
   <label>Email</label><input id="e" type="email" autocomplete="email">
   <label>Password</label><input id="w" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')submit()">
   <div class="err">${err}</div>
   <button class="btn block" onclick="submit()">${mode === 'login' ? 'Log in' : 'Create account'}</button>`;
 }
-function demo() { document.getElementById('e').value = 'demo@member.com'; document.getElementById('w').value = 'demo123'; }
 function submit() {
   const g = id => (document.getElementById(id) || {}).value || '';
   const r = mode === 'login' ? S.login(g('e'), g('w')) : (!g('n').trim() || g('p').replace(/\D/g, '').length < 9 || !g('e').includes('@') ? { err: 'Fill in name, phone and a valid email.' } : S.signup({ name: g('n'), phone: g('p'), email: g('e'), pass: g('w') }));
@@ -43,7 +41,7 @@ function home() {
   const month = S.today().slice(0, 7), mv = vis.filter(c => S.ymd(c.in).startsWith(month)).length;
   const days = last ? S.plan(last.planId).days : 30, pct = s.left > 0 ? Math.min(1, s.left / days) : 0, C = 2 * Math.PI * 52;
   const col = { active: 'var(--grn)', expiring: 'var(--amb)', expired: 'var(--red)', none: 'var(--mut)' }[s.key];
-  root.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 14px"><div><small>Hello,</small><h2 style="margin:0">${esc(m.name.split(' ')[0])} 💪</h2></div><button class="btn ghost sm" onclick="S.logout();authView()">Log out</button></div>
+  root.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 14px"><div><small>Hello,</small><h2 style="margin:0">${esc(m.name.split(' ')[0])}</h2></div><button class="btn ghost sm" onclick="S.logout();authView()">Log out</button></div>
   <div class="card" style="text-align:center">
     <div class="ring"><svg width="150" height="150" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="var(--line)" stroke-width="10"/><circle cx="60" cy="60" r="52" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${pct * C} ${C}"/></svg>
       <div><b style="color:${col}">${s.key === 'none' ? '—' : Math.max(0, s.left)}</b><small>${s.key === 'none' ? 'no plan' : 'days left'}</small></div></div>
@@ -53,8 +51,8 @@ function home() {
   </div>
   <div class="sum" style="margin-top:12px"><div><b>${mv}</b><small>Visits this month</small></div><div><b>${vis.length}</b><small>Total visits</small></div><div><b>${vis[0] ? S.fmtDate(S.ymd(vis[0].in)).slice(0, 6) : '—'}</b><small>Last visit</small></div></div>
   <h3>Reminders</h3><div class="card">
-    <div class="tog"><span>📧 Email reminders<br><small>${esc(m.email || 'no email')} · ${S.CONFIG.reminderDays} days before expiry</small></span><button class="sw ${m.prefs.email ? 'on' : ''}" onclick="tg('email')"></button></div>
-    <div class="tog" style="border:0"><span>💬 WhatsApp reminders<br><small>${esc(m.phone)}</small></span><button class="sw ${m.prefs.whatsapp ? 'on' : ''}" onclick="tg('whatsapp')"></button></div></div>
+    <div class="tog"><span>Email reminders<br><small>${esc(m.email || 'no email')} · ${S.CONFIG.reminderDays} days before expiry</small></span><button class="sw ${m.prefs.email ? 'on' : ''}" onclick="tg('email')"></button></div>
+    <div class="tog" style="border:0"><span>WhatsApp reminders<br><small>${esc(m.phone)}</small></span><button class="sw ${m.prefs.whatsapp ? 'on' : ''}" onclick="tg('whatsapp')"></button></div></div>
   <h3>Payment history</h3>${pays.length ? pays.slice(0, 6).map(p => `<div class="row"><div class="grow"><b>${S.money(p.amount)} · ${esc(S.plan(p.planId).name)}</b><small>${S.fmtDate(p.paid)} · ${p.method}${p.code ? ' · ' + esc(p.code) : ''}</small></div><small>→ ${S.fmtDate(p.end).slice(0, 6)}</small></div>`).join('') : '<div class="empty">No payments yet.</div>'}
   <h3>Recent visits</h3>${vis.length ? vis.slice(0, 5).map(c => `<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(c.in))}</b><small>${S.fmtTime(c.in)} → ${c.out ? S.fmtTime(c.out) : 'inside now'}</small></div></div>`).join('') : '<div class="empty">No visits yet.</div>'}`;
 }
