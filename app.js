@@ -672,8 +672,12 @@
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
     try {
-      if (currentRole === 'trainer') await loadMembersFromDatabase();
-      else await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]);
+      if (currentRole === 'trainer') {
+        await loadMembersFromDatabase();
+        // Clear any legacy browser-cached financial or management data before a trainer session.
+        S.data.plans = []; S.data.memberships = []; S.data.payments = []; S.data.checkins = [];
+        S.data.accounts = []; S.data.reminders = []; S.save();
+      } else await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]);
     }
     catch (error) {
       databaseError(error);
