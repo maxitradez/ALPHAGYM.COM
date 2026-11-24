@@ -282,7 +282,7 @@
       <a class="btn wa" target="_blank" rel="noopener" href="${S.waLink(m.phone,S.reminderMsg(m))}">WhatsApp</a>
       ${m.email?`<a class="btn ghost" href="${S.mailLink(m)}">Email</a>`:`<button class="btn ghost" onclick="toast('No email on file')">Email</button>`}</div>
       <h3>Memberships & balances</h3>${membershipHtml}
-      <h3>Payment history</h3>${pays.length?pays.slice(0,10).map(p=>`<div class="row"><div class="grow"><b>${S.money(p.amount)} · ${esc(S.plan(p.planId)?.name||'Membership')}</b><small>${S.fmtDate(p.paid)} · ${esc(p.method.toUpperCase())}${p.code?' · '+esc(p.code):''}${p.notes?' · '+esc(p.notes):''}</small></div></div>`).join(''):'<div class="empty">No payments recorded.</div>'}
+      <h3>Payment history</h3>${pays.length?pays.slice(0,10).map(p=>'<div class="row"><div class="grow"><b>'+S.money(p.amount)+' · '+esc(S.plan(p.planId)?.name||'Membership')+(p.isVoided?' <span class="badge b-expired">Reversed</span>':'')+'</b><small>'+S.fmtDate(p.paid)+' · '+esc(p.method.toUpperCase())+(p.code?' · '+esc(p.code):'')+(p.notes?' · '+esc(p.notes):'')+(p.isVoided?' · Reason: '+esc(p.voidReason):'')+'</small></div>'+(!p.isVoided&&['owner','manager'].includes(currentRole)?'<button class="btn sm red" onclick="openVoidPayment(\''+p.id+'\',\''+id+'\')">Reverse</button>':'')+'</div>').join(''):'<div class="empty">No payments recorded.</div>'}
       <h3>Recent visits</h3>${vis.length?vis.slice(0,5).map(v=>`<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(v.in))}</b><small>${S.fmtTime(v.in)} → ${v.out?S.fmtTime(v.out):'inside'}</small></div></div>`).join(''):'<div class="empty">No visits yet.</div>'}
       <button class="btn block ghost" style="color:var(--red)" onclick="delMember('${id}')">Archive member</button>`);
   }
@@ -390,6 +390,25 @@
     openMember(id); refresh();
   }
 
+  function openVoidPayment(paymentId,memberId) {
+    if(!['owner','manager'].includes(currentRole)){toast('Only the owner or manager can reverse payments');return;}
+    const payment=S.data.payments.find(p=>p.id===paymentId);
+    if(!payment||payment.isVoided){toast('Payment is unavailable or already reversed');return;}
+    modal('<h3>Reverse payment</h3><div class="prev"><b>'+S.money(payment.amount)+'</b><br>'+esc(payment.method.toUpperCase())+' · '+S.fmtDate(payment.paid)+'<br><small>The payment will no longer count toward balances or revenue. Its original record will be retained.</small></div><label>Reason for reversal (required)</label><textarea id="void-reason" rows="3" maxlength="500" placeholder="Explain why this payment is being reversed"></textarea><button class="btn block red" onclick="saveVoidPayment(\''+paymentId+'\',\''+memberId+'\')">Confirm reversal</button><button class="btn block ghost" onclick="openMember(\''+memberId+'\')">Cancel</button>');
+  }
+  async function saveVoidPayment(paymentId,memberId) {
+    if(!['owner','manager'].includes(currentRole)){toast('Only the owner or manager can reverse payments');return;}
+    const reason=$('#void-reason').value.trim();
+    if(reason.length<5){toast('Enter a clear reason (at least 5 characters)');return;}
+    const payment=S.data.payments.find(p=>p.id===paymentId);
+    if(!payment||payment.isVoided){toast('Payment is unavailable or already reversed');return;}
+    const {error}=await db.from('payment_voids').insert({payment_id:paymentId,reason,voided_by:currentUser.id});
+    if(error){databaseError(error);return;}
+    try{await loadPaymentsFromDatabase();}catch(e){databaseError(e);return;}
+    closeModal();toast('Payment reversed; balance and revenue updated');
+    openMember(memberId);refresh();
+  }
+
   function openSettings() {
     modal(`<h3>Settings</h3>
       <button class="btn block ghost" onclick="exportMembers()">Export members (CSV)</button>
@@ -478,7 +497,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
+  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
