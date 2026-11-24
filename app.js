@@ -532,8 +532,8 @@
     const { data, error } = await window.alphaSupabase.auth.signInWithPassword({ email, password });
     if (error) { err.textContent = error.message; btn.disabled = false; btn.textContent = 'Sign in'; return; }
     const { data: profile, error: profileError } = await window.alphaSupabase
-      .from('profiles').select('role').eq('id', data.user.id).single();
-    if (profileError || !profile || !['owner','manager','receptionist','trainer'].includes(profile.role)) {
+      .from('profiles').select('role,is_active').eq('id', data.user.id).single();
+    if (profileError || !profile || !profile.is_active || !['owner','manager','receptionist','trainer'].includes(profile.role)) {
       await window.alphaSupabase.auth.signOut();
       showGate('This account does not have management access. Contact the gym owner.');
       return;
@@ -555,8 +555,8 @@
   async function gate() {
     const { data: { session } } = await window.alphaSupabase.auth.getSession();
     if (session) {
-      const { data: profile, error } = await window.alphaSupabase.from('profiles').select('role').eq('id', session.user.id).single();
-      if (!error && profile && ['owner','manager','receptionist','trainer'].includes(profile.role)) {
+      const { data: profile, error } = await window.alphaSupabase.from('profiles').select('role,is_active').eq('id', session.user.id).single();
+      if (!error && profile && profile.is_active && ['owner','manager','receptionist','trainer'].includes(profile.role)) {
         currentUser = session.user; currentRole = profile.role;
         sessionStorage.setItem('adm','1'); await boot(); return;
       }
