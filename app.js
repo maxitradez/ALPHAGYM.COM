@@ -662,6 +662,7 @@
   // ---------- shell ----------
   function refresh() { if (route === 'checkin') drawCI(); else if (route === 'members') drawMembers(); else render(); }
   function render() {
+    if (currentRole === 'trainer' && !['home','members'].includes(route)) route = 'home';
     $('#view').innerHTML = V[route](); if (after[route]) after[route]();
     const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','members'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
     $('#tabs').innerHTML = visibleTabs.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
