@@ -216,7 +216,7 @@
       <div id="cw"><label>M-Pesa code</label><input id="c" placeholder="e.g. SHK3L9XQ2P" style="text-transform:uppercase"></div>
       <button class="btn block" onclick="saveMember()">Save member</button>`);
   }
-  function saveMember() {
+  async function saveMember() {
     const n = $('#n').value.trim(), p = $('#p').value.trim();
     if (!n || p.replace(/\D/g, '').length < 9) { toast('Enter a name and valid phone'); return; }
     const email = $('#e').value.trim();
