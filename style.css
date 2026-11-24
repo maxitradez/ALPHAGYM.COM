@@ -135,7 +135,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .sw.on{background:var(--acc)}.sw.on:after{left:23px;background:#0b0d10}
 .err{color:var(--red);font-size:.85rem;margin-bottom:8px}
 
-@media(max-width:420px){.tabs{grid-template-columns:repeat(9,minmax(58px,1fr));overflow-x:auto;justify-content:start}.tabs button{white-space:nowrap;font-size:.62rem}}
+@media(max-width:420px){.tabs{grid-template-columns:repeat(10,minmax(58px,1fr));overflow-x:auto;justify-content:start}.tabs button{white-space:nowrap;font-size:.62rem}}
 
 /* ---------- reports ---------- */
 .report-head{margin-bottom:10px}.report-head h2{margin-bottom:4px}
