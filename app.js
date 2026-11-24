@@ -23,17 +23,19 @@
   }
   async function loadPaymentsFromDatabase() {
     const { data, error } = await db.from('payments')
-      .select('id,gym_member_id,membership_id,amount,method,reference,received_at,notes')
+      .select('id,gym_member_id,membership_id,amount,method,reference,received_at,notes,payment_voids(id,reason,voided_at)')
       .not('gym_member_id', 'is', null).order('received_at', { ascending: false });
     if (error) throw error;
     S.data.payments = (data || []).map(p => {
       const membership = (S.data.memberships || []).find(ms => ms.id === p.membership_id);
+      const voidRecord = Array.isArray(p.payment_voids) ? p.payment_voids[0] : p.payment_voids;
       return {
         id:p.id, memberId:p.gym_member_id, membershipId:p.membership_id,
         planId:membership?.plan_id || null, amount:Number(p.amount),
         method:p.method, code:p.reference || '', paid:p.received_at.slice(0,10),
         receivedAt:p.received_at, start:membership?.start_date || null,
-        end:membership?.end_date || null, notes:p.notes || ''
+        end:membership?.end_date || null, notes:p.notes || '',
+        isVoided:!!voidRecord, voidReason:voidRecord?.reason || '', voidedAt:voidRecord?.voided_at || null
       };
     });
   }
@@ -62,7 +64,7 @@
   const badge = s => `<span class="badge b-${s.key}">${s.label}</span>`;
   const sub = s => s.key === 'none' ? 'No membership' : s.left < 0 ? `Expired ${-s.left}d ago` : s.left === 0 ? 'Ends today' : `${s.left}d left`;
   function memberMemberships(id) { return (S.data.memberships || []).filter(x => x.gym_member_id === id).sort((a,b) => b.start_date.localeCompare(a.start_date)); }
-  function membershipPaid(id) { return S.data.payments.filter(p => p.membershipId === id).reduce((n,p) => n + Number(p.amount || 0), 0); }
+  function membershipPaid(id) { return S.data.payments.filter(p => p.membershipId === id && !p.isVoided).reduce((n,p) => n + Number(p.amount || 0), 0); }
   function membershipBalance(ms) { return Math.max(0, Number(ms.price_at_purchase) - Number(ms.discount_amount || 0) - membershipPaid(ms.id)); }
   function memberStatus(m) {
     const list = memberMemberships(m.id);
