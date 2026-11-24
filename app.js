@@ -43,14 +43,14 @@
 
   async function loadAttendanceFromDatabase() {
     const { data, error } = await db.from('attendance_sessions')
-      .select('id,gym_member_id,checked_in_at,checked_out_at,check_in_method,check_in_by,check_out_by')
+      .select('id,gym_member_id,checked_in_at,checked_out_at,check_in_method,check_in_by,check_out_by,notes')
       .not('gym_member_id', 'is', null)
       .order('checked_in_at', { ascending: false });
     if (error) throw error;
     S.data.checkins = (data || []).map(c => ({
       id: c.id, memberId: c.gym_member_id,
       in: c.checked_in_at, out: c.checked_out_at || null,
-      method: c.check_in_method, checkInBy: c.check_in_by, checkOutBy: c.check_out_by
+      method: c.check_in_method, checkInBy: c.check_in_by, checkOutBy: c.check_out_by, notes: c.notes || ''
     }));
   }
 
@@ -205,7 +205,7 @@
     if (S.isInside(id)) { toast('Already inside'); return false; }
     const { data, error } = await db.from('attendance_sessions').insert({
       gym_member_id: id, check_in_method: 'manual', check_in_by: currentUser.id, notes
-    }).select('id,gym_member_id,checked_in_at,checked_out_at,check_in_method,check_in_by,check_out_by').single();
+    }).select('id,gym_member_id,checked_in_at,checked_out_at,check_in_method,check_in_by,check_out_by,notes').single();
     if (error) {
       if (error.code === '23505') toast('This member already has an open check-in');
       else databaseError(error);
@@ -214,7 +214,7 @@
     S.data.checkins.unshift({
       id: data.id, memberId: data.gym_member_id, in: data.checked_in_at,
       out: data.checked_out_at || null, method: data.check_in_method,
-      checkInBy: data.check_in_by, checkOutBy: data.check_out_by
+      checkInBy: data.check_in_by, checkOutBy: data.check_out_by, notes: data.notes || ''
     });
     toast(label || 'Member checked in'); refresh(); return true;
   }
@@ -549,7 +549,7 @@
       ${m.email?`<a class="btn ghost" href="${S.mailLink(m)}">Email</a>`:`<button class="btn ghost" onclick="toast('No email on file')">Email</button>`}</div>
       <h3>Memberships & balances</h3>${membershipHtml}
       <h3>Payment history</h3>${pays.length?pays.slice(0,10).map(p=>'<div class="row"><div class="grow"><b>'+S.money(p.amount)+' · '+esc(S.plan(p.planId)?.name||'Membership')+(p.isVoided?' <span class="badge b-expired">Reversed</span>':'')+'</b><small>'+S.fmtDate(p.paid)+' · '+esc(p.method.toUpperCase())+(p.code?' · '+esc(p.code):'')+(p.notes?' · '+esc(p.notes):'')+(p.isVoided?' · Reason: '+esc(p.voidReason):'')+'</small></div>'+(!p.isVoided&&['owner','manager'].includes(currentRole)?'<button class="btn sm red" onclick="openVoidPayment(\''+p.id+'\',\''+id+'\')">Reverse</button>':'')+'</div>').join(''):'<div class="empty">No payments recorded.</div>'}
-      <h3>Recent visits</h3>${vis.length?vis.slice(0,5).map(v=>`<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(v.in))}</b><small>${S.fmtTime(v.in)} → ${v.out?S.fmtTime(v.out):'inside'}</small></div></div>`).join(''):'<div class="empty">No visits yet.</div>'}
+      <h3>Recent visits</h3>${vis.length?vis.slice(0,5).map(v=>`<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(v.in))}</b><small>${S.fmtTime(v.in)} → ${v.out?S.fmtTime(v.out):'inside'}${v.notes ? ' · '+esc(v.notes) : ''}</small></div></div>`).join(''):'<div class="empty">No visits yet.</div>'}
       <button class="btn block ghost" style="color:var(--red)" onclick="delMember('${id}')">Archive member</button>`);
   }
   async function delMember(id) {
