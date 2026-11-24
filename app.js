@@ -160,7 +160,7 @@
     ${exp.length ? exp.slice(0, 5).map(x => row(x.m)).join('') : '<div class="empty">Nobody is about to expire.</div>'}
     ${exp.length ? `<button class="btn block ghost" onclick="go('reminders')">Review membership reminders →</button>` : ''}`;
   };
-  V.checkin = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Check-in tools are not available to trainer accounts.</div>' : `<h2>Check-in / out</h2>`
+  V.checkin = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Check-in tools are not available to trainer accounts.</div>' : `<h2>Check-in / out</h2>
     <input id="q" placeholder="Search name or phone…" oninput="drawCI()" autocomplete="off">
     <div id="res"></div>
     <h3>Inside now <span class="pill" id="cnt"></span></h3><div id="inside"></div>`;
@@ -248,7 +248,7 @@
   }
   function setFilter(f) { filter = f; drawMembers(); }
 
-  V.plans = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Membership plan management is not available to trainer accounts.</div>' : `<h2>Membership plans <span class="pill">${S.data.plans.length}</span></h2>`
+  V.plans = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Membership plan management is not available to trainer accounts.</div>' : `<h2>Membership plans <span class="pill">${S.data.plans.length}</span></h2>
     <p class="mut">Configure the packages Alpha Gym offers. Prices and durations are controlled by management.</p>
     <div id="plans-list"></div>
     ${['owner','manager'].includes(currentRole) ? '<button class="fab" onclick="openPlanForm()">+</button>' : ''}`;
