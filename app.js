@@ -108,6 +108,15 @@
       return head + `<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(S.plan(x.planId).name)} · ${x.method}${x.code ? ' · ' + esc(x.code) : ''}<br>Valid ${S.fmtDate(x.start)} → ${S.fmtDate(x.end)}</small></div><div class="right"><b>${S.money(x.amount)}</b></div></div>`;
     }).join('')}`;
   };
+  function exportMembers() {
+    const rows = [['Name', 'Phone', 'Email', 'Joined', 'Membership status', 'Membership expiry', 'Visits']];
+    S.data.members.forEach(m => {
+      const status = S.status(m);
+      rows.push([m.name, m.phone, m.email, m.joined, status.label, status.end || '', S.memberVisits(m.id).length]);
+    });
+    download('members.csv', rows);
+  }
+
   function exportPay() { download('payments.csv', [['Date', 'Member', 'Phone', 'Plan', 'Amount', 'Method', 'Code', 'Valid from', 'Valid to'], ...S.data.payments.map(p => { const m = S.member(p.memberId) || {}; return [p.paid, m.name, m.phone, S.plan(p.planId).name, p.amount, p.method, p.code, p.start, p.end]; })]); }
 
   V.reminders = () => {
