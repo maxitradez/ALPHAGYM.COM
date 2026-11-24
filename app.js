@@ -113,13 +113,12 @@
   V.reminders = () => {
     const list = S.data.members.map(m => ({ m, s: S.status(m) })).filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14)).sort((a, b) => a.s.left - b.s.left);
     return `<h2>Reminders</h2>
-    <div class="autocard"><b>Reminder management</b><br>Members with accounts get an email <b>${S.CONFIG.reminderDays} days before</b> expiry, <b>on the day</b>, and <b>3 days after</b>. Below: everyone who needs a nudge, with one-tap WhatsApp.</div>
-    ${list.length ? `<button class="btn block" style="margin:0 0 12px" onclick="queueAll()">Email all ${list.length} now</button>` : ''}
+    <div class="autocard">Review memberships that are approaching expiry or have expired. Contact members using the available contact details.</div>
     ${list.length ? list.map(({ m, s }) => {
       const done = S.remindedToday(m.id);
       return `<div class="row"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(sub(s))} · ${badge(s)} ${done ? '· sent today' : ''}</small></div>
       <a class="btn wa sm" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}" onclick="logRem('${m.id}','whatsapp')">WhatsApp</a></div>`;
-    }).join('') : '<div class="empty">All caught up. No reminders needed today 🎉</div>'}`;
+    }).join('') : '<div class="empty">No reminders are currently required.</div>'}`;
   };
   function logRem(id, ch) { S.logReminder(id, ch); setTimeout(() => route === 'reminders' && render(), 400); }
   function queueAll() {
@@ -192,9 +191,8 @@
     modal(`<h3>Settings</h3>
       <button class="btn block ghost" onclick="exportMembers()">Export members (CSV)</button>
       <button class="btn block ghost" onclick="exportPay()">Export payments (CSV)</button>
-      <button class="btn block ghost" onclick="if(confirm('Clear locally stored application data?')){Store.reset();closeModal();render();toast('Local data cleared')}">Clear local data</button>
       <button class="btn block ghost" onclick="sessionStorage.removeItem('adm');location.reload()">Lock app</button>
-      <p class="mut" style="margin-top:14px;font-size:.8rem;text-align:center"></p>`);
+`);
   }
   function exportMembers() { download('members.csv', [['Name', 'Phone', 'Email', 'Joined', 'Status', 'Valid until'], ...S.data.members.map(m => { const s = S.status(m); return [m.name, m.phone, m.email, m.joined, s.label, s.end || '']; })]); }
 
