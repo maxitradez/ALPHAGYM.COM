@@ -43,6 +43,16 @@ body.app{padding-bottom:84px}
 .stat.hi{background:linear-gradient(135deg,#d7ff6b,#a6ee1c);color:#0b0d10;border:0}
 .stat.hi small{color:#2d3a07}
 .stat.warn b{color:var(--amb)}.stat.bad b{color:var(--red)}
+.dash-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
+.dash-head h2{margin:0 0 3px}.dash-head p{font-size:.82rem;color:var(--mut)}
+.dash-live{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--mut);font-size:.7rem;white-space:nowrap}
+.dash-live i{width:7px;height:7px;border-radius:50%;background:var(--grn);display:block}
+.dash-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
+.dash-actions .btn{width:100%;padding:11px 8px;font-size:.82rem}
+h3.dash-label{margin-top:20px}
+.stat em{display:block;font-style:normal;font-size:.68rem;color:inherit;opacity:.75;margin-top:3px}
+.stat-money{font-size:1.05rem!important;line-height:1.3;margin-top:8px!important;overflow-wrap:anywhere}
+
 .bars{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:18px}
 .bar{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative}
 .bar i{width:100%;background:linear-gradient(180deg,var(--acc),#6fae0f);border-radius:6px 6px 2px 2px;display:block}
