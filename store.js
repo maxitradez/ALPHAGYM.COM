@@ -77,8 +77,8 @@
     checkIn(id) { if (S.isInside(id)) return; data.checkins.push({ id: uid(), memberId: id, in: new Date().toISOString(), out: null }); save(); },
     checkOut(cid) { const c = data.checkins.find(x => x.id === cid); if (c) { c.out = new Date().toISOString(); save(); } },
     checkinsOn: d => data.checkins.filter(c => ymd(c.in) === d),
-    revenueOn: d => data.payments.filter(p => p.paid === d).reduce((a, p) => a + p.amount, 0),
-    revenueSince: d => data.payments.filter(p => p.paid >= d).reduce((a, p) => a + p.amount, 0),
+    revenueOn: d => data.payments.filter(p => !p.isVoided && p.paid === d).reduce((a, p) => a + p.amount, 0),
+    revenueSince: d => data.payments.filter(p => !p.isVoided && p.paid >= d).reduce((a, p) => a + p.amount, 0),
     lastDays(n, fn) { const t = today(); return Array.from({ length: n }, (_, i) => { const date = addDays(t, i - n + 1); return { date, val: fn(date) }; }); },
     reminderMsg(m) {
       const s = S.status(m), first = m.name.split(' ')[0];
