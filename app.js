@@ -40,6 +40,19 @@
     });
   }
 
+  async function loadAttendanceFromDatabase() {
+    const { data, error } = await db.from('attendance_sessions')
+      .select('id,gym_member_id,checked_in_at,checked_out_at,check_in_method,check_in_by,check_out_by')
+      .not('gym_member_id', 'is', null)
+      .order('checked_in_at', { ascending: false });
+    if (error) throw error;
+    S.data.checkins = (data || []).map(c => ({
+      id: c.id, memberId: c.gym_member_id,
+      in: c.checked_in_at, out: c.checked_out_at || null,
+      method: c.check_in_method, checkInBy: c.check_in_by, checkOutBy: c.check_out_by
+    }));
+  }
+
   async function loadMembersFromDatabase() {
     const { data, error } = await db.from('gym_members')
       .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at')
@@ -134,8 +147,27 @@
       return `<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>In at ${S.fmtTime(c.in)} · ${mins} min</small></div><button class="btn sm red" onclick="event.stopPropagation();doOut('${c.id}')">Check out</button></div>`;
     }).join('') : '<div class="empty">Gym is empty right now.</div>';
   }
-  function doIn(id) {
-    const m = S.member(id), s = memberStatus(m);
+  async function createAttendanceSession(id, label) {
+    if (S.isInside(id)) { toast('Already inside'); return false; }
+    const { data, error } = await db.from('attendance_sessions').insert({
+      gym_member_id: id, check_in_method: 'manual', check_in_by: currentUser.id
+    }).select('id,gym_member_id,checked_in_at,checked_out_at,check_in_method,check_in_by,check_out_by').single();
+    if (error) {
+      if (error.code === '23505') toast('This member already has an open check-in');
+      else databaseError(error);
+      return false;
+    }
+    S.data.checkins.unshift({
+      id: data.id, memberId: data.gym_member_id, in: data.checked_in_at,
+      out: data.checked_out_at || null, method: data.check_in_method,
+      checkInBy: data.check_in_by, checkOutBy: data.check_out_by
+    });
+    toast(label || 'Member checked in'); refresh(); return true;
+  }
+  async function doIn(id) {
+    const m = S.member(id);
+    if (!m) { toast('Member not found'); return; }
+    const s = memberStatus(m);
     if (S.isInside(id)) { toast('Already inside'); return; }
     if (s.key === 'expired' || s.key === 'none') {
       modal(`<h3>${esc(m.name)}</h3><p class="mut" style="margin:6px 0 14px">${s.key === 'none' ? 'No membership yet.' : 'Membership expired on ' + S.fmtDate(s.end) + '.'}</p>
@@ -143,10 +175,23 @@
         <button class="btn block ghost" onclick="forceIn('${id}')">Let in anyway</button>
         <button class="btn block ghost" onclick="closeModal()">Cancel</button>`); return;
     }
-    S.checkIn(id); toast(`${m.name} checked in` + (s.key === 'expiring' ? ` · ${s.left === 0 ? 'ends today' : s.left + 'd left'}` : '')); refresh();
+    await createAttendanceSession(id, `${m.name} checked in` + (s.key === 'expiring' ? ` · ${s.left === 0 ? 'ends today' : s.left + 'd left'}` : ''));
   }
-  function forceIn(id) { S.checkIn(id); closeModal(); toast('Checked in (expired)'); refresh(); }
-  function doOut(cid) { S.checkOut(cid); toast('Checked out'); refresh(); }
+  async function forceIn(id) {
+    const saved = await createAttendanceSession(id, 'Checked in (expired membership override)');
+    if (saved) closeModal();
+  }
+  async function doOut(cid) {
+    const { data, error } = await db.from('attendance_sessions')
+      .update({ checked_out_at: new Date().toISOString(), check_out_by: currentUser.id })
+      .eq('id', cid).is('checked_out_at', null)
+      .select('id,gym_member_id,checked_out_at,check_out_by').maybeSingle();
+    if (error) { databaseError(error); return; }
+    if (!data) { toast('This visit is already checked out'); return; }
+    const visit = S.data.checkins.find(c => c.id === cid);
+    if (visit) { visit.out = data.checked_out_at; visit.checkOutBy = data.check_out_by; }
+    toast('Checked out'); refresh();
+  }
 
   V.members = () => `<h2>Members <span class="pill">${S.data.members.length}</span></h2>
     <input id="q" placeholder="Search members…" oninput="drawMembers()" autocomplete="off">
@@ -505,6 +550,9 @@
       $('#view').innerHTML = '<div class="empty">Could not load core Alpha Gym records. Check your connection and reload.</div>';
       return;
     }
+    // Attendance is loaded from the database; an attendance read failure must not blank the whole management portal.
+    try { await loadAttendanceFromDatabase(); }
+    catch (error) { databaseError(error); S.data.checkins = []; }
     // Payments are secondary data: a payment-query issue must never prevent the management shell from opening.
     try { await loadPaymentsFromDatabase(); }
     catch (error) { console.error('Alpha Gym payments could not be loaded:', error); S.data.payments = []; }
