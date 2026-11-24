@@ -676,7 +676,7 @@
         await loadMembersFromDatabase();
         // Clear any legacy browser-cached financial or management data before a trainer session.
         S.data.plans = []; S.data.memberships = []; S.data.payments = []; S.data.checkins = [];
-        S.data.accounts = []; S.data.reminders = []; S.save();
+        S.data.accounts = []; S.save();
       } else await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]);
     }
     catch (error) {
