@@ -124,4 +124,3 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .sw:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
 .sw.on{background:var(--acc)}.sw.on:after{left:23px;background:#0b0d10}
 .err{color:var(--red);font-size:.85rem;margin-bottom:8px}
-.demo{background:rgba(255,176,32,.1);border:1px solid rgba(255,176,32,.3);color:var(--amb);border-radius:12px;padding:10px 12px;font-size:.8rem;margin-bottom:14px}
