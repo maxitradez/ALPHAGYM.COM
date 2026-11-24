@@ -130,7 +130,7 @@
           <div class="stat warn"><small>Outstanding balances</small><b class="stat-money">${S.money(outstanding)}</b></div>
         </div>
         <h3>Revenue · last 7 days</h3><div class="card">${bars(S.lastDays(7, S.revenueOn), k)}</div>`
-      : `<h3 class="dash-label">Front desk collections</h3>
+      : `<h3 class="dash-label">Today's Revenue</h3>
         <div class="stats"><div class="stat"><small>Collected today</small><b class="stat-money">${S.money(todayRevenue)}</b><em>Payments recorded today</em></div></div>`;
     return `
     <div class="dash-head">
@@ -166,11 +166,12 @@
   };
   V.profile = () => {
     const p = currentProfile || {};
-    const name = p.full_name || currentUser?.user_metadata?.full_name || 'Name not set';
+    const name = p.full_name || 'Name not set';
     const email = p.email || currentUser?.email || 'Not available';
     const phone = p.phone || 'Not provided';
     const role = currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : 'Staff';
     const active = !!p.is_active;
+    const canManage = ['owner','manager'].includes(currentRole);
     return `<div class="dash-head"><div><h2>My Profile</h2><p>Your Alpha Gym account details</p></div><span class="badge ${active ? 'b-active' : 'b-expired'}">${active ? 'Active account' : 'Inactive account'}</span></div>
       <div class="card profile-card">
         <div class="profile-identity"><div class="av">${ini(name)}</div><div class="grow"><b>${esc(name)}</b><small>${esc(email)}</small></div></div>
@@ -181,9 +182,33 @@
           <div><small>Assigned role</small><b>${esc(role)}</b></div>
           <div><small>Account status</small><b>${active ? 'Active' : 'Inactive'}</b></div>
         </div>
+        <button class="btn block" style="margin-top:16px" onclick="openProfileEdit()">Edit profile</button>
       </div>
-      <p class="mut" style="font-size:.8rem;margin-top:12px">Profile details are view-only in this version.</p>`;
+      <p class="mut" style="font-size:.8rem;margin-top:12px">${canManage ? 'You can update your full name and phone number. Login email and assigned access are managed separately.' : 'You can update your full name only. Contact the owner or manager to change other account details.'}</p>`;
   };
+  function openProfileEdit() {
+    const p = currentProfile || {};
+    const canManage = ['owner','manager'].includes(currentRole);
+    modal(`<h3>Edit profile</h3>
+      <label>Full name</label><input id="profile-name" maxlength="120" value="${esc(p.full_name || '')}" placeholder="Enter your full name">
+      ${canManage ? `<label>Phone number</label><input id="profile-phone" maxlength="40" value="${esc(p.phone || '')}" placeholder="Enter phone number">` : ''}
+      <p class="mut" style="font-size:.82rem;margin:10px 0">Email, role and account status cannot be changed here.</p>
+      <button class="btn block" onclick="saveProfile()">Save changes</button>
+      <button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
+  }
+  async function saveProfile() {
+    const fullName = ($('#profile-name') || {}).value?.trim() || '';
+    if (fullName.length < 2) { toast('Enter your full name'); return; }
+    const updates = { full_name: fullName };
+    if (['owner','manager'].includes(currentRole)) updates.phone = ($('#profile-phone') || {}).value?.trim() || null;
+    const { data, error } = await db.from('profiles').update(updates).eq('id', currentUser.id)
+      .select('full_name,email,phone,role,is_active').single();
+    if (error) { databaseError(error); return; }
+    currentProfile = data;
+    closeModal();
+    toast('Profile updated');
+    render();
+  }
 
   V.checkin = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Check-in tools are not available to trainer accounts.</div>' : `<h2>Check-in / out</h2>
     <input id="q" placeholder="Search name or phone…" oninput="drawCI()" autocomplete="off">
@@ -808,7 +833,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff });
+  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
