@@ -16,6 +16,11 @@
     }));
   }
 
+  async function loadMembershipsFromDatabase() {
+    const { data, error } = await db.from('member_memberships').select('id,gym_member_id,plan_id,status,start_date,end_date,price_at_purchase,discount_amount,currency,notes,created_at').not('gym_member_id', 'is', null).order('start_date', { ascending: false });
+    if (error) throw error;
+    S.data.memberships = data || [];
+  }
   async function loadMembersFromDatabase() {
     const { data, error } = await db.from('gym_members')
       .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at')
@@ -39,6 +44,17 @@
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const badge = s => `<span class="badge b-${s.key}">${s.label}</span>`;
   const sub = s => s.key === 'none' ? 'No membership' : s.left < 0 ? `Expired ${-s.left}d ago` : s.left === 0 ? 'Ends today' : `${s.left}d left`;
+  function memberMemberships(id) { return (S.data.memberships || []).filter(x => x.gym_member_id === id).sort((a,b) => b.start_date.localeCompare(a.start_date)); }
+  function memberStatus(m) {
+    const list = memberMemberships(m.id);
+    const current = list.find(x => x.status === 'active' && x.end_date >= S.today()) || list[0];
+    if (!current) return {key:'none',label:'No plan',left:null,end:null};
+    if (current.status === 'frozen') return {key:'frozen',label:'Frozen',left:null,end:current.end_date};
+    if (current.status === 'pending') return {key:'pending',label:'Pending',left:null,end:current.end_date};
+    if (current.status === 'cancelled') return {key:'expired',label:'Cancelled',left:-1,end:current.end_date};
+    const left=S.diff(S.today(),current.end_date);
+    return {key:left<0?'expired':left<=S.CONFIG.reminderDays?'expiring':'active',label:left<0?'Expired':left===0?'Expiring':'Active',left,end:current.end_date};
+  }
   const k = v => v ? (v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'k' : v) : '';
   function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200); }
   function modal(h) { $('#modal').innerHTML = `<div class="sheet">${h}</div>`; $('#modal').classList.add('open'); }
@@ -48,7 +64,7 @@
     return `<div class="bars">${arr.map(a => `<div class="bar"><span class="bv">${fmt ? fmt(a.val) : a.val || ''}</span><i style="height:${Math.max(3, a.val / max * 100)}%"></i><em>${S.dow(a.date)}</em></div>`).join('')}</div>`;
   }
   function row(m, right = '') {
-    const s = S.status(m);
+    const s = memberStatus(m);
     return `<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(sub(s))} · ${esc(m.phone)}</small></div>${right || badge(s)}</div>`;
   }
   function download(name, rows) { S.download(name, S.csv(rows)); }
@@ -56,7 +72,7 @@
   // ---------- views ----------
   const V = {}, after = {};
   V.home = () => {
-    const t = S.today(), st = S.data.members.map(m => ({ m, s: S.status(m) }));
+    const t = S.today(), st = S.data.members.map(m => ({ m, s: memberStatus(m) }));
     const active = st.filter(x => x.s.key === 'active' || x.s.key === 'expiring').length;
     const exp = st.filter(x => x.s.key === 'expiring').sort((a, b) => a.s.left - b.s.left);
     const expired = st.filter(x => x.s.key === 'expired').length;
@@ -98,7 +114,7 @@
     }).join('') : '<div class="empty">Gym is empty right now.</div>';
   }
   function doIn(id) {
-    const m = S.member(id), s = S.status(m);
+    const m = S.member(id), s = memberStatus(m);
     if (S.isInside(id)) { toast('Already inside'); return; }
     if (s.key === 'expired' || s.key === 'none') {
       modal(`<h3>${esc(m.name)}</h3><p class="mut" style="margin:6px 0 14px">${s.key === 'none' ? 'No membership yet.' : 'Membership expired on ' + S.fmtDate(s.end) + '.'}</p>
@@ -118,7 +134,7 @@
   after.members = () => drawMembers();
   function drawMembers() {
     const q = ($('#q') || {}).value ? $('#q').value.toLowerCase().trim() : '';
-    const all = S.data.members.map(m => ({ m, s: S.status(m) }));
+    const all = S.data.members.map(m => ({ m, s: memberStatus(m) }));
     const cnt = key => all.filter(x => key === 'all' || x.s.key === key).length;
     $('#chips').innerHTML = [['all', 'All'], ['active', 'Active'], ['expiring', 'Expiring'], ['expired', 'Expired'], ['none', 'No plan']].map(([key, l]) => `<button class="chip ${filter === key ? 'on' : ''}" onclick="setFilter('${key}')">${l} ${cnt(key)}</button>`).join('');
     const list = all.filter(x => (filter === 'all' || x.s.key === filter) && (!q || x.m.name.toLowerCase().includes(q) || x.m.phone.includes(q)))
@@ -198,7 +214,7 @@
   function exportMembers() {
     const rows = [['Name', 'Phone', 'Email', 'Joined', 'Membership status', 'Membership expiry', 'Visits']];
     S.data.members.forEach(m => {
-      const status = S.status(m);
+      const status = memberStatus(m);
       rows.push([m.name, m.phone, m.email, m.joined, status.label, status.end || '', S.memberVisits(m.id).length]);
     });
     download('members.csv', rows);
@@ -207,7 +223,7 @@
   function exportPay() { download('payments.csv', [['Date', 'Member', 'Phone', 'Plan', 'Amount', 'Method', 'Code', 'Valid from', 'Valid to'], ...S.data.payments.map(p => { const m = S.member(p.memberId) || {}; return [p.paid, m.name, m.phone, S.plan(p.planId).name, p.amount, p.method, p.code, p.start, p.end]; })]); }
 
   V.reminders = () => {
-    const list = S.data.members.map(m => ({ m, s: S.status(m) })).filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14)).sort((a, b) => a.s.left - b.s.left);
+    const list = S.data.members.map(m => ({ m, s: memberStatus(m) })).filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14)).sort((a, b) => a.s.left - b.s.left);
     return `<h2>Reminders</h2>
     <div class="autocard">Review memberships that are approaching expiry or have expired. Contact members using the available contact details.</div>
     ${list.length ? list.map(({ m, s }) => {
@@ -218,20 +234,20 @@
   };
   function logRem(id, ch) { S.logReminder(id, ch); setTimeout(() => route === 'reminders' && render(), 400); }
   function queueAll() {
-    const list = S.data.members.filter(m => { const s = S.status(m); return s.key === 'expiring' || (s.key === 'expired' && s.left >= -14); });
+    const list = S.data.members.filter(m => { const s = memberStatus(m); return s.key === 'expiring' || (s.key === 'expired' && s.left >= -14); });
     list.forEach(m => S.logReminder(m.id, 'email'));
     toast(`${list.length} reminder emails queued`); render();
   }
 
   // ---------- modals ----------
   function openMember(id) {
-    const m = S.member(id), s = S.status(m), inn = S.isInside(id), pays = S.memberPayments(id), vis = S.memberVisits(id);
+    const m = S.member(id), s = memberStatus(m), inn = S.isInside(id), pays = S.memberPayments(id), vis = S.memberVisits(id);
     const open = S.data.checkins.find(c => c.memberId === id && !c.out);
     modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>${esc(m.phone)}${m.email ? ' · ' + esc(m.email) : ''}</small></div>${badge(s)}</div>
       <div class="prev" style="margin-top:14px">${s.key === 'none' ? 'No membership yet.' : `Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
       <div class="acts">
         <button class="btn" onclick="editMember('${id}')">Edit member</button>
-        <button class="btn" onclick="openPay('${id}')">Add payment</button>
+        <button class="btn" onclick="openAssign('${id}')">Assign plan</button>
         ${inn ? `<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>` : `<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
         <a class="btn wa" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}">WhatsApp</a>
         ${m.email ? `<a class="btn ghost" href="${S.mailLink(m)}">Email</a>` : `<button class="btn ghost" onclick="toast('No email on file')">Email</button>`}
@@ -299,6 +315,24 @@
     closeModal(); toast('Member saved to Alpha Gym database'); refresh();
   }
 
+  function openAssign(id) {
+    const m=S.member(id), plans=(S.data.plans||[]).filter(p=>p.isActive);
+    if(!m)return; if(!plans.length){toast('Create an active membership plan first');return;}
+    modal('<h3>Assign membership · '+esc(m.name)+'</h3><label>Membership plan</label><select id="assign-plan">'+plans.map(p=>'<option value="'+p.id+'">'+esc(p.name)+' · '+S.money(p.price)+' · '+p.days+' days</option>').join('')+'</select><label>Start date</label><input id="assign-start" type="date" value="'+S.today()+'"><label>Discount (KES)</label><input id="assign-discount" type="number" min="0" step="0.01" value="0"><label>Notes (optional)</label><textarea id="assign-notes" rows="2"></textarea><div class="prev" id="assign-preview"></div><button class="btn block" onclick="saveAssignment(\''+id+'\')">Assign membership</button><button class="btn block ghost" onclick="closeModal()">Cancel</button>');
+    $('#assign-plan').onchange=updateAssignPreview; $('#assign-start').onchange=updateAssignPreview; $('#assign-discount').oninput=updateAssignPreview; updateAssignPreview();
+  }
+  function updateAssignPreview() {
+    const p=S.plan($('#assign-plan').value), start=$('#assign-start').value, discount=Number($('#assign-discount').value||0);
+    if(!p||!start)return; const end=S.addDays(start,p.days-1), net=Number(p.price)-discount;
+    $('#assign-preview').innerHTML='Price <b>'+S.money(p.price)+'</b> · Discount <b>'+S.money(discount)+'</b><br>Membership <b>'+S.fmtDate(start)+'</b> → <b>'+S.fmtDate(end)+'</b><br>Net price <b>'+S.money(net)+'</b>';
+  }
+  async function saveAssignment(id) {
+    const p=S.plan($('#assign-plan').value), start=$('#assign-start').value, discount=Number($('#assign-discount').value||0);
+    if(!p||!start||!Number.isFinite(discount)||discount<0||discount>p.price){toast('Check the plan, start date and discount');return;}
+    const {error}=await db.from('member_memberships').insert({gym_member_id:id,plan_id:p.id,status:'active',start_date:start,end_date:S.addDays(start,p.days-1),price_at_purchase:p.price,discount_amount:discount,currency:'KES',notes:$('#assign-notes').value.trim()||null,created_by:currentUser.id,updated_by:currentUser.id});
+    if(error){databaseError(error);return;} try{await loadMembershipsFromDatabase();}catch(e){databaseError(e);return;}
+    closeModal();toast('Membership assigned');openMember(id);refresh();
+  }
   function openPay(id, thenIn) {
     toast('Membership assignment and payment recording are being connected next.');
     return;
@@ -347,7 +381,7 @@
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
-    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase()]); }
+    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]); }
     catch (error) {
       databaseError(error);
       $('#view').innerHTML = '<div class="empty">Could not load member records from the Alpha Gym database. Check your connection and reload.</div>';
@@ -410,7 +444,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
+  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate();
 })();
