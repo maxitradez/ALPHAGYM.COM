@@ -48,7 +48,7 @@
 <script src="store.js"></script>
 <script>
 const S = Store, C = S.CONFIG, esc = S.esc;
-document.getElementById('logo').innerHTML = esc(C.gym).replace(/^(\\S+)/, '<span>$1</span>');
+document.getElementById('logo').innerHTML = esc(C.gym).replace(/^(\S+)/, '<span>$1</span>');
 document.getElementById('area').textContent = C.area;
 document.getElementById('copy').textContent = '© ' + new Date().getFullYear() + ' ' + C.gym;
 const planGrid = document.getElementById('planGrid');
