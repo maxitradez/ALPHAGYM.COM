@@ -21,6 +21,13 @@
 <nav class="tabs" id="tabs"></nav>
 <div id="modal" onclick="if(event.target===this)closeModal()"></div>
 <div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+window.alphaSupabase = window.supabase.createClient(
+  'https://phphtxrgnpemnspuvjhi.supabase.co',
+  'sb_publishable_62JzTKTeK4xuVUIHoLvcCw_Z6oodjkF'
+);
+</script>
 <script src="store.js"></script>
 <script src="app.js"></script>
 </body>
