@@ -54,6 +54,30 @@
     }));
   }
 
+  let groupClassRecords = [], classAttendanceRecords = [], classTrainerRecords = [], classDate = S.today();
+  const classDays = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  async function loadGroupClasses() {
+    const { data, error } = await db.from('group_classes')
+      .select('id,name,class_type,day_of_week,start_time,end_time,instructor_id,instructor_name,description,is_active')
+      .order('day_of_week').order('start_time');
+    if (error) throw error;
+    groupClassRecords = data || [];
+    if (['owner','manager','receptionist'].includes(currentRole)) {
+      const result = await db.from('profiles').select('id,full_name').eq('role','trainer').eq('is_active',true).order('full_name');
+      if (result.error) throw result.error;
+      classTrainerRecords = result.data || [];
+    } else classTrainerRecords = [];
+    await loadClassAttendance(classDate);
+  }
+  async function loadClassAttendance(date) {
+    classDate = date || S.today();
+    const { data, error } = await db.from('group_class_attendance')
+      .select('id,class_id,gym_member_id,session_date,status,notes,recorded_by')
+      .eq('session_date', classDate);
+    if (error) throw error;
+    classAttendanceRecords = data || [];
+  }
+
   async function loadMembersFromDatabase() {
     const { data, error } = await db.from('gym_members')
       .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at')
@@ -71,7 +95,7 @@
     console.error('Alpha Gym database error:', error);
     toast(error && error.message ? error.message : 'Database request failed');
   }
-  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reports', '06', 'Reports'], ['reminders', '07', 'Reminders'], ['staff', '08', 'Staff'], ['profile', '09', 'Profile']];
+  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['classes', '03', 'Classes'], ['members', '04', 'Members'], ['plans', '05', 'Plans'], ['payments', '06', 'Payments'], ['reports', '07', 'Reports'], ['reminders', '08', 'Reminders'], ['staff', '09', 'Staff'], ['profile', '10', 'Profile']];
 
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -233,6 +257,114 @@
     <div id="res"></div>
     <h3>Inside now <span class="pill" id="cnt"></span></h3><div id="inside"></div>`;
   after.checkin = () => drawCI();
+
+  V.classes = () => {
+    const canManage = ['owner','manager'].includes(currentRole);
+    const canRecord = ['owner','manager','receptionist'].includes(currentRole) || currentRole === 'trainer';
+    const activeCount = groupClassRecords.filter(c => c.is_active).length;
+    return `<div class="dash-head"><div><h2>Group Classes</h2><p>Weekly timetable and member attendance</p></div><span class="pill">${activeCount} active sessions</span></div>
+      <div class="card class-date-card"><label for="class-date">Attendance date</label><input id="class-date" type="date" value="${esc(classDate)}" onchange="changeClassDate(this.value)"><small class="mut">Choose the date when recording or reviewing attendance.</small></div>
+      ${canManage ? '<button class="btn block" onclick="openClassForm()">＋ Add class to timetable</button>' : ''}
+      <div class="class-note"><b>Regular schedule</b><span>Monday–Friday · 6:30–7:30 AM and 5:50–7:00 PM</span></div>
+      ${classDays.map((day, index) => {
+        const items = groupClassRecords.filter(c => Number(c.day_of_week) === index + 1);
+        return `<section class="class-day"><h3>${day}</h3>
+          ${items.length ? items.map(c => {
+            const count = classAttendanceRecords.filter(a => a.class_id === c.id && a.status === 'attended').length;
+            const isTrainerAssigned = currentRole === 'trainer' && c.instructor_id === currentUser.id;
+            const mayRecord = canRecord && (currentRole !== 'trainer' || isTrainerAssigned);
+            return `<article class="card class-card ${c.is_active ? '' : 'class-inactive'}">
+              <div class="class-card-top"><div class="grow"><b>${esc(c.name)}</b><small>${esc(c.class_type)} · ${esc(c.instructor_name || 'Instructor to be assigned')}</small></div><span class="badge ${c.is_active ? 'b-active' : 'b-expired'}">${c.is_active ? 'Active' : 'Inactive'}</span></div>
+              <p class="class-time">${esc(String(c.start_time).slice(0,5))} – ${esc(String(c.end_time).slice(0,5))}</p>
+              ${c.description ? `<p class="mut">${esc(c.description)}</p>` : ''}
+              <div class="class-card-actions"><span class="mut">${count} attended on selected date</span>
+                ${mayRecord && c.is_active ? `<button class="btn sm" onclick="openClassAttendance('${c.id}')">Attendance</button>` : ''}
+                ${canManage ? `<button class="btn sm ghost" onclick="openClassForm('${c.id}')">Edit</button><button class="btn sm ghost" onclick="toggleGroupClass('${c.id}')">${c.is_active ? 'Deactivate' : 'Activate'}</button>` : ''}
+              </div>
+            </article>`;
+          }).join('') : '<div class="empty">No classes scheduled.</div>'}
+        </section>`;
+      }).join('')}
+      ${currentRole === 'trainer' ? '<p class="mut class-footnote">You can record attendance only for classes assigned to you.</p>' : ''}
+    `;
+  };
+
+  async function changeClassDate(date) {
+    if (!date) return;
+    try { await loadClassAttendance(date); render(); }
+    catch (error) { databaseError(error); }
+  }
+  function openClassForm(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can edit the timetable'); return; }
+    const c = id ? groupClassRecords.find(x => x.id === id) : null;
+    const trainerOptions = ['<option value="">To be assigned</option>'].concat(classTrainerRecords.map(t => `<option value="${t.id}" ${c?.instructor_id === t.id ? 'selected' : ''}>${esc(t.full_name)}</option>`)).join('');
+    const typeOptions = ['Group Fitness','Aerobics','Dance Fitness','Full-body Workout','Cardio Fitness','Themed Session'].map(t => `<option value="${t}" ${(c?.class_type || 'Group Fitness') === t ? 'selected' : ''}>${t}</option>`).join('');
+    modal(`<h3>${c ? 'Edit' : 'Add'} group class</h3>
+      <label>Class name</label><input id="class-name" maxlength="120" value="${esc(c?.name || '')}" placeholder="e.g. Morning Group Fitness">
+      <label>Class type</label><select id="class-type">${typeOptions}</select>
+      <label>Day</label><select id="class-day">${classDays.map((d,i) => `<option value="${i+1}" ${Number(c?.day_of_week || 1) === i+1 ? 'selected' : ''}>${d}</option>`).join('')}</select>
+      <label>Start time</label><input id="class-start" type="time" value="${esc(String(c?.start_time || '06:30').slice(0,5))}">
+      <label>End time</label><input id="class-end" type="time" value="${esc(String(c?.end_time || '07:30').slice(0,5))}">
+      <label>Instructor</label><select id="class-instructor">${trainerOptions}</select>
+      <label>Description (optional)</label><textarea id="class-description" rows="2" maxlength="500">${esc(c?.description || '')}</textarea>
+      <button class="btn block" onclick="saveGroupClass('${c?.id || ''}')">Save class</button>
+      <button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
+  }
+  async function saveGroupClass(id) {
+    if (!['owner','manager'].includes(currentRole)) return;
+    const name = $('#class-name').value.trim(), type = $('#class-type').value;
+    const day = Number($('#class-day').value), start = $('#class-start').value, end = $('#class-end').value;
+    const instructorId = $('#class-instructor').value || null;
+    const trainer = classTrainerRecords.find(t => t.id === instructorId);
+    if (name.length < 2 || !Number.isInteger(day) || day < 1 || day > 5 || !start || !end || end <= start) {
+      toast('Enter a class name, weekday and valid time range'); return;
+    }
+    const payload = {name,class_type:type,day_of_week:day,start_time:start,end_time:end,instructor_id:instructorId,instructor_name:trainer?.full_name || null,description:$('#class-description').value.trim() || null,updated_by:currentUser.id};
+    const result = id
+      ? await db.from('group_classes').update(payload).eq('id',id)
+      : await db.from('group_classes').insert({...payload,created_by:currentUser.id});
+    if (result.error) { databaseError(result.error); return; }
+    try { await loadGroupClasses(); closeModal(); toast(id ? 'Class updated' : 'Class added'); render(); }
+    catch (error) { databaseError(error); }
+  }
+  async function toggleGroupClass(id) {
+    if (!['owner','manager'].includes(currentRole)) return;
+    const c = groupClassRecords.find(x => x.id === id); if (!c) return;
+    const { error } = await db.from('group_classes').update({is_active:!c.is_active,updated_by:currentUser.id}).eq('id',id);
+    if (error) { databaseError(error); return; }
+    await loadGroupClasses(); render(); toast(c.is_active ? 'Class deactivated' : 'Class activated');
+  }
+  function openClassAttendance(id) {
+    const c = groupClassRecords.find(x => x.id === id); if (!c || !c.is_active) return;
+    if (currentRole === 'trainer' && c.instructor_id !== currentUser.id) { toast('You can only record attendance for your assigned classes'); return; }
+    const records = classAttendanceRecords.filter(a => a.class_id === id);
+    const options = ['<option value="">Select member</option>'].concat(S.data.members.map(m => `<option value="${m.id}">${esc(m.name)} · ${esc(m.phone || '')}</option>`)).join('');
+    modal(`<h3>Class attendance</h3><p class="mut">${esc(c.name)} · ${classDate}</p>
+      <label>Add member</label><select id="class-member">${options}</select>
+      <button class="btn block" onclick="saveClassAttendance('${id}')">Record attendance</button>
+      <div class="class-attendance-list"><b>Recorded members (${records.length})</b>
+      ${records.length ? records.map(a => { const m = S.member(a.gym_member_id); return `<div class="row"><div class="av">${ini(m?.name || 'M')}</div><div class="grow"><b>${esc(m?.name || 'Member record')}</b><small>${esc(a.status)}</small></div></div>`; }).join('') : '<div class="empty">No attendance recorded for this class on this date.</div>'}
+      </div><button class="btn block ghost" onclick="closeModal()">Close</button>`);
+  }
+  async function saveClassAttendance(classId) {
+    const memberId = $('#class-member').value;
+    if (!memberId) { toast('Select a member'); return; }
+    const member = S.member(memberId);
+    if (!member) { toast('Member record not found'); return; }
+    if (currentRole === 'trainer') {
+      const c = groupClassRecords.find(x => x.id === classId);
+      if (!c || c.instructor_id !== currentUser.id) { toast('You are not assigned to this class'); return; }
+    }
+    const { error } = await db.from('group_class_attendance').insert({class_id:classId,gym_member_id:memberId,session_date:classDate,status:'attended',recorded_by:currentUser.id});
+    if (error) {
+      if (error.code === '23505') toast('This member is already recorded for this class');
+      else databaseError(error);
+      return;
+    }
+    try { await loadClassAttendance(classDate); openClassAttendance(classId); render(); toast('Class attendance recorded'); }
+    catch (error) { databaseError(error); }
+  }
+
   function drawCI() {
     const q = ($('#q') || {}).value ? $('#q').value.toLowerCase().trim() : '';
     const list = q ? S.data.members.filter(m => m.name.toLowerCase().includes(q) || m.phone.includes(q)).slice(0, 8) : [];
@@ -764,12 +896,12 @@
   // ---------- shell ----------
   function refresh() { if (route === 'checkin') drawCI(); else if (route === 'members') drawMembers(); else render(); }
   function render() {
-    if (currentRole === 'trainer' && !['home','members','profile'].includes(route)) route = 'home';
+    if (currentRole === 'trainer' && !['home','classes','members','profile'].includes(route)) route = 'home';
     $('#view').innerHTML = V[route](); if (after[route]) after[route]();
-    const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','members','profile'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
+    const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','classes','members','profile'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
     $('#tabs').innerHTML = visibleTabs.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
   }
-  function go(r) { if (currentRole === 'trainer' && !['home','members','profile'].includes(r)) r = 'home'; route = r; location.hash = r; render(); scrollTo(0, 0); }
+  function go(r) { if (currentRole === 'trainer' && !['home','classes','members','profile'].includes(r)) r = 'home'; route = r; location.hash = r; render(); scrollTo(0, 0); }
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
@@ -787,6 +919,8 @@
       return;
     }
     // Attendance is loaded from the database; an attendance read failure must not blank the whole management portal.
+    try { await loadGroupClasses(); }
+    catch (error) { console.error('Alpha Gym group classes could not be loaded:', error); groupClassRecords = []; classAttendanceRecords = []; }
     if (currentRole !== 'trainer') {
       try { await loadAttendanceFromDatabase(); }
       catch (error) { databaseError(error); S.data.checkins = []; }
@@ -851,7 +985,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile });
+  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile, changeClassDate, openClassForm, saveGroupClass, toggleGroupClass, openClassAttendance, saveClassAttendance });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
