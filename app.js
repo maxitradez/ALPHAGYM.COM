@@ -191,34 +191,62 @@
     modal(`<h3>Settings</h3>
       <button class="btn block ghost" onclick="exportMembers()">Export members (CSV)</button>
       <button class="btn block ghost" onclick="exportPay()">Export payments (CSV)</button>
-      <button class="btn block ghost" onclick="sessionStorage.removeItem('adm');location.reload()">Lock app</button>
+      <button class="btn block ghost" onclick="lockApp()">Lock app / Sign out</button>
 `);
   }
-  function exportMembers() { download('members.csv', [['Name', 'Phone', 'Email', 'Joined', 'Status', 'Valid until'], ...S.data.members.map(m => { const s = S.status(m); return [m.name, m.phone, m.email, m.joined, s.label, s.end || '']; })]); }
-
-  // ---------- shell ----------
-  function refresh() { if (route === 'checkin') drawCI(); else if (route === 'members') drawMembers(); else render(); }
-  function render() {
-    $('#view').innerHTML = V[route](); if (after[route]) after[route]();
-    $('#tabs').innerHTML = TABS.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
+  async function lockApp() {
+    await window.alphaSupabase.auth.signOut();
+    sessionStorage.removeItem('adm');
+    location.reload();
   }
-  function go(r) { route = r; location.hash = r; render(); scrollTo(0, 0); }
-  function boot() {
-    $('#gate').innerHTML = '';
-    $('#brand').innerHTML = esc(S.CONFIG.gym).replace(/^(\S+)/, '<span>$1</span>');
-    $('#date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-    const h = location.hash.slice(1); if (V[h]) route = h;
-    render();
+  function showGate(message = '') {
+    $('#gate').innerHTML = `<div class="gatebox"><h1>Alpha<span>.</span></h1>
+      <p class="mut" style="margin-bottom:18px">Management sign in</p>
+      <label>Email</label><input id="owner-email" type="email" autocomplete="username" placeholder="name@example.com">
+      <label>Password</label><input id="owner-password" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')unlock()">
+      <div class="err" id="perr">${esc(message)}</div>
+      <button class="btn block" id="login-btn" onclick="unlock()">Sign in</button>
+      <button class="btn block ghost" style="margin-top:8px" onclick="forgotPassword()">Forgot password?</button>
+      <p class="mut" style="margin-top:14px;font-size:.8rem">Use an account authorised by Alpha Gym.</p></div>`;
   }
-  function unlock() {
-    if ($('#pin').value === S.CONFIG.pin) { sessionStorage.setItem('adm', '1'); boot(); } else { $('#perr').textContent = 'Wrong PIN'; }
+  async function unlock() {
+    const email = ($('#owner-email') || {}).value?.trim() || '';
+    const password = ($('#owner-password') || {}).value || '';
+    const err = $('#perr'), btn = $('#login-btn');
+    if (!email || !password) { err.textContent = 'Enter your email and password.'; return; }
+    btn.disabled = true; btn.textContent = 'Signing in…'; err.textContent = '';
+    const { data, error } = await window.alphaSupabase.auth.signInWithPassword({ email, password });
+    if (error) { err.textContent = error.message; btn.disabled = false; btn.textContent = 'Sign in'; return; }
+    const { data: profile, error: profileError } = await window.alphaSupabase
+      .from('profiles').select('role').eq('id', data.user.id).single();
+    if (profileError || !profile || !['owner','manager','receptionist','trainer'].includes(profile.role)) {
+      await window.alphaSupabase.auth.signOut();
+      showGate('This account does not have management access. Contact the gym owner.');
+      return;
+    }
+    sessionStorage.setItem('adm', '1');
+    boot();
   }
-  function gate() {
-    if (sessionStorage.getItem('adm') === '1') return boot();
-    $('#gate').innerHTML = `<div class="gatebox"><h1>${esc(S.CONFIG.gym.split(' ')[0])}<span>.</span></h1><p class="mut" style="margin-bottom:18px">Owner access</p>
-      <input id="pin" type="password" inputmode="numeric" placeholder="Enter PIN" style="text-align:center;font-size:1.3rem" onkeydown="if(event.key==='Enter')unlock()">
-      <div class="err" id="perr"></div><button class="btn block" onclick="unlock()">Unlock</button>
-      <p class="mut" style="margin-top:14px;font-size:.8rem"></p></div>`;
+  async function forgotPassword() {
+    const email = ($('#owner-email') || {}).value?.trim() || '';
+    const err = $('#perr'), btn = $('#login-btn');
+    if (!email) { err.textContent = 'Enter your account email first.'; return; }
+    btn.disabled = true; btn.textContent = 'Sending…'; err.textContent = '';
+    const redirectTo = new URL('reset-password.html', location.href).href;
+    const { error } = await window.alphaSupabase.auth.resetPasswordForEmail(email, { redirectTo });
+    btn.disabled = false; btn.textContent = 'Sign in';
+    err.textContent = error ? error.message : 'If an account exists for that email, a password reset link has been sent. Check the inbox.';
+  }
+  async function gate() {
+    const { data: { session } } = await window.alphaSupabase.auth.getSession();
+    if (session) {
+      const { data: profile, error } = await window.alphaSupabase.from('profiles').select('role').eq('id', session.user.id).single();
+      if (!error && profile && ['owner','manager','receptionist','trainer'].includes(profile.role)) {
+        sessionStorage.setItem('adm','1'); boot(); return;
+      }
+      await window.alphaSupabase.auth.signOut();
+    }
+    showGate();
   }
 
   Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, doIn, doOut, forceIn, setFilter, openMember, delMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, render });
