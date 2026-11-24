@@ -1,5 +1,4 @@
-/* Alpha Gym application data layer.
-   Swap this file for a Supabase-backed version when the client signs. */
+/* Alpha Gym application data layer. */
 (function () {
   const KEY = 'alpha_gym_local_v1', SESSION = 'alpha_gym_session', DAY = 864e5;
 
@@ -7,10 +6,10 @@
   const CONFIG = {
     gym: 'Alpha Gym',
     tag: 'Train hard. Recover harder.',
-    phone: '254700000000',      // WhatsApp format, no +
-    display: '0700 000 000',
-    till: '123456',             // M-Pesa till / paybill shown to members
-    area: 'Nairobi, Kenya',
+    phone: '',                  // Set the gym's verified WhatsApp number
+    display: '',
+    till: '',                   // Set the gym's verified M-Pesa till or paybill
+    area: '',                    // Set the gym's verified location
     pin: '1234',                // Temporary local access PIN; replace with Supabase Auth
     reminderDays: 3             // "expiring" window
   };
@@ -26,58 +25,9 @@
   const dow = s => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(s + 'T12:00:00').getDay()];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const normPhone = p => { p = String(p).replace(/[^\d]/g, ''); if (p.startsWith('0')) p = '254' + p.slice(1); if (p.startsWith('7') || p.startsWith('1')) p = '254' + p; return p; };
-  const rng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-
+  
   function seed() {
-    const r = rng(11), t = today();
-    const plans = [
-      { id: 'daily', name: 'Day Pass', price: 300, days: 1 },
-      { id: 'weekly', name: 'Weekly', price: 1000, days: 7 },
-      { id: 'monthly', name: 'Monthly', price: 3000, days: 30 },
-      { id: 'quarterly', name: '3 Months', price: 8000, days: 90 }
-    ];
-    const names = ['Brian Otieno', 'Faith Wanjiku', 'Kevin Mutua', 'Mercy Achieng', 'Dennis Kiprop', 'Grace Njeri', 'Samuel Omondi', 'Lucy Wambui',
-      'Peter Kamau', 'Joy Chebet', 'Allan Mwangi', 'Esther Atieno', 'Victor Kiptoo', 'Ann Muthoni', 'Collins Odhiambo', 'Sharon Naliaka',
-      'James Karanja', 'Diana Akinyi', 'Moses Barasa', 'Cynthia Wairimu', 'Eric Ndungu', 'Nancy Jeptoo', 'Hassan Abdi', 'Rose Mbithe'];
-    const left = [25, 18, 12, 9, 5, 3, 2, 1, 0, -2, -5, -9, -20, 22, 15, 28, 7, 4, -1, 30, 11, 2, 60, -14];
-    const members = [], payments = [], checkins = [];
-    const code = () => 'S' + Array.from({ length: 9 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789'[Math.floor(r() * 34)]).join('');
-    const pay = (memberId, plan, start, end, method) => payments.push({ id: uid(), memberId, planId: plan.id, amount: plan.price, method, code: method === 'M-Pesa' ? code() : '', paid: start, start, end });
-    names.forEach((n, i) => {
-      const id = 'm' + (i + 1);
-      members.push({
-        id, name: n, phone: '2547' + String(10000000 + Math.floor(r() * 89999999)),
-        email: i === 0 ? 'demo@member.com' : n.toLowerCase().replace(/[^a-z]+/g, '.') + '@example.com',
-        joined: addDays(t, -Math.floor(60 + r() * 300)), prefs: { email: true, whatsapp: true }
-      });
-      const plan = left[i] > 30 ? plans[3] : (left[i] <= 7 && i % 3 === 0 ? plans[1] : plans[2]);
-      const end = addDays(t, left[i]), start = addDays(end, -plan.days + 1);
-      const method = r() < .7 ? 'M-Pesa' : 'Cash';
-      pay(id, plan, start, end, method);
-      if (r() < .85) { const pe = addDays(start, -1); pay(id, plan, addDays(pe, -plan.days + 1), pe, r() < .7 ? 'M-Pesa' : 'Cash'); }
-    });
-    // walk-in day/week passes so the revenue chart looks alive (never change a member's expiry)
-    for (let d = 13; d >= 0; d--) {
-      const date = addDays(t, -d);
-      for (let n = 0, c = 1 + Math.floor(r() * 4); n < c; n++) {
-        const m = members[Math.floor(r() * members.length)], end = payments.filter(p => p.memberId === m.id).map(p => p.end).sort().pop();
-        if (end && end >= date) pay(m.id, r() < .75 ? plans[0] : plans[1], date, date, r() < .6 ? 'M-Pesa' : 'Cash');
-      }
-    }
-    for (let d = 13; d >= 1; d--) {
-      const date = addDays(t, -d);
-      members.forEach(m => {
-        if (r() < .32) {
-          const h = String(6 + Math.floor(r() * 14)).padStart(2, '0'), mi = String(Math.floor(r() * 60)).padStart(2, '0');
-          const inn = new Date(`${date}T${h}:${mi}:00`);
-          checkins.push({ id: uid(), memberId: m.id, in: inn.toISOString(), out: new Date(+inn + (45 + Math.floor(r() * 60)) * 6e4).toISOString() });
-        }
-      });
-    }
-    const now = Date.now();
-    [1, 3, 5, 7, 9].forEach((k, j) => checkins.push({ id: uid(), memberId: 'm' + k, in: new Date(now - (10 + j * 17) * 6e4).toISOString(), out: null }));
-    [2, 4, 6].forEach((k, j) => checkins.push({ id: uid(), memberId: 'm' + k, in: new Date(now - (170 + j * 20) * 6e4).toISOString(), out: new Date(now - (90 + j * 10) * 6e4).toISOString() }));
-    return { v: 1, plans, members, payments, checkins, accounts: [{ email: 'demo@member.com', pass: 'demo123', memberId: 'm1' }], reminders: [] };
+    return { v: 1, plans: [], members: [], payments: [], checkins: [], accounts: [], reminders: [] };
   }
 
   function load() {
