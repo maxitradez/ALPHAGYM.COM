@@ -1,7 +1,20 @@
 (function () {
   const S = Store, $ = s => document.querySelector(s), esc = S.esc;
-  let route = 'home', filter = 'all', currentUser = null;
+  let route = 'home', filter = 'all', currentUser = null, currentRole = null;
   const db = window.alphaSupabase;
+
+  async function loadPlansFromDatabase() {
+    const { data, error } = await db.from('membership_plans')
+      .select('id,name,description,duration_days,price,currency,max_visits,includes_group_classes,is_public,is_active,sort_order')
+      .order('sort_order', { ascending: true }).order('created_at', { ascending: true });
+    if (error) throw error;
+    S.data.plans = (data || []).map(p => ({
+      id: p.id, name: p.name, description: p.description || '', days: p.duration_days,
+      price: Number(p.price), currency: p.currency, maxVisits: p.max_visits,
+      includesGroupClasses: p.includes_group_classes, isPublic: p.is_public,
+      isActive: p.is_active, sortOrder: p.sort_order
+    }));
+  }
 
   async function loadMembersFromDatabase() {
     const { data, error } = await db.from('gym_members')
@@ -20,7 +33,7 @@
     console.error('Alpha Gym database error:', error);
     toast(error && error.message ? error.message : 'Database request failed');
   }
-  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['payments', '04', 'Payments'], ['reminders', '05', 'Reminders']];
+  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reminders', '06', 'Reminders']];
 
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -113,6 +126,61 @@
     $('#res').innerHTML = list.length ? list.map(x => row(x.m)).join('') : '<div class="empty">No members found.</div>';
   }
   function setFilter(f) { filter = f; drawMembers(); }
+
+  V.plans = () => `<h2>Membership plans <span class="pill">${S.data.plans.length}</span></h2>
+    <p class="mut">Configure the packages Alpha Gym offers. Prices and durations are controlled by management.</p>
+    <div id="plans-list"></div>
+    ${['owner','manager'].includes(currentRole) ? '<button class="fab" onclick="openPlanForm()">+</button>' : ''}`;
+  after.plans = () => drawPlans();
+  function drawPlans() {
+    const host = $('#plans-list'); if (!host) return;
+    const plans = S.data.plans;
+    host.innerHTML = plans.length ? plans.map(p => `<div class="card" style="margin:10px 0;padding:16px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+        <div class="grow"><b>${esc(p.name)}</b><small>${p.days} days · ${p.maxVisits ? p.maxVisits + ' visits' : 'Unlimited visits'} · ${p.includesGroupClasses ? 'Group classes included' : 'Group classes not included'}</small></div>
+        <b>${S.money(p.price)}</b>
+      </div>
+      ${p.description ? `<p class="mut" style="margin:10px 0">${esc(p.description)}</p>` : ''}
+      <div class="acts"><span class="badge ${p.isActive ? 'b-active' : 'b-expired'}">${p.isActive ? 'Active' : 'Inactive'}</span><span class="mut">${p.isPublic ? 'Shown publicly' : 'Staff only'}</span>
+      ${['owner','manager'].includes(currentRole) ? `<button class="btn sm" onclick="openPlanForm('${p.id}')">Edit</button><button class="btn sm ghost" onclick="togglePlan('${p.id}')">${p.isActive ? 'Deactivate' : 'Activate'}</button>` : ''}</div>
+    </div>`).join('') : '<div class="empty">No membership plans yet. Add the gym\'s real packages when their details are confirmed.</div>';
+  }
+
+  function openPlanForm(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can manage plans'); return; }
+    const p = id ? S.plan(id) : null;
+    modal(`<h3>${p ? 'Edit' : 'Add'} membership plan</h3>
+      <label>Plan name</label><input id="plan-name" maxlength="100" value="${esc(p?.name || '')}" placeholder="e.g. Monthly membership">
+      <label>Description (optional)</label><textarea id="plan-desc" rows="2" placeholder="What's included?">${esc(p?.description || '')}</textarea>
+      <label>Duration (days)</label><input id="plan-days" type="number" min="1" step="1" value="${p?.days || ''}" placeholder="e.g. 30">
+      <label>Price (KES)</label><input id="plan-price" type="number" min="0" step="0.01" value="${p ? p.price : ''}" placeholder="Enter confirmed price">
+      <label>Visit limit (optional)</label><input id="plan-visits" type="number" min="1" step="1" value="${p?.maxVisits || ''}" placeholder="Leave blank for unlimited">
+      <label style="display:flex;gap:8px;align-items:center;margin:12px 0"><input id="plan-classes" type="checkbox" ${p?.includesGroupClasses !== false ? 'checked' : ''}> Group classes included</label>
+      <label style="display:flex;gap:8px;align-items:center;margin:12px 0"><input id="plan-public" type="checkbox" ${p?.isPublic !== false ? 'checked' : ''}> Show on public website</label>
+      <button class="btn block" onclick="savePlan('${p?.id || ''}')">Save plan</button>
+      <button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
+  }
+  async function savePlan(id) {
+    const name=$('#plan-name').value.trim(), days=Number($('#plan-days').value), price=Number($('#plan-price').value);
+    const visitsRaw=$('#plan-visits').value.trim(), visits=visitsRaw ? Number(visitsRaw) : null;
+    if (!name || !Number.isInteger(days) || days < 1 || !Number.isFinite(price) || price < 0 || (visits !== null && (!Number.isInteger(visits) || visits < 1))) {
+      toast('Enter a name, valid duration, price and visit limit'); return;
+    }
+    const payload={name,description:$('#plan-desc').value.trim() || null,duration_days:days,price,currency:'KES',max_visits:visits,includes_group_classes:$('#plan-classes').checked,is_public:$('#plan-public').checked,updated_by:currentUser.id};
+    let result;
+    if (id) result=await db.from('membership_plans').update(payload).eq('id',id);
+    else result=await db.from('membership_plans').insert({...payload,created_by:currentUser.id});
+    if (result.error) { databaseError(result.error); return; }
+    try { await loadPlansFromDatabase(); } catch(error) { databaseError(error); return; }
+    closeModal(); toast(id ? 'Plan updated' : 'Plan created'); render();
+  }
+  async function togglePlan(id) {
+    if (!['owner','manager'].includes(currentRole)) return;
+    const p=S.plan(id); if (!p) return;
+    const {error}=await db.from('membership_plans').update({is_active:!p.isActive,updated_by:currentUser.id}).eq('id',id);
+    if (error) { databaseError(error); return; }
+    await loadPlansFromDatabase(); render(); toast(p.isActive ? 'Plan deactivated' : 'Plan activated');
+  }
 
   V.payments = () => {
     const t = S.today(), p = [...S.data.payments].sort((a, b) => b.paid.localeCompare(a.paid) || b.end.localeCompare(a.end));
@@ -232,6 +300,8 @@
   }
 
   function openPay(id, thenIn) {
+    toast('Membership assignment and payment recording are being connected next.');
+    return;
     const m = S.member(id), last = S.memberPayments(id)[0];
     modal(`<h3>Payment · ${esc(m.name)}</h3>
       <label>Plan</label><select id="pl" onchange="updPrev('${id}')">${S.data.plans.map(p => `<option value="${p.id}" ${(last ? last.planId : 'monthly') === p.id ? 'selected' : ''}>${esc(p.name)} · ${S.money(p.price)}</option>`).join('')}</select>
@@ -277,7 +347,7 @@
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
-    try { await loadMembersFromDatabase(); }
+    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase()]); }
     catch (error) {
       databaseError(error);
       $('#view').innerHTML = '<div class="empty">Could not load member records from the Alpha Gym database. Check your connection and reload.</div>';
@@ -313,7 +383,7 @@
       showGate('This account does not have management access. Contact the gym owner.');
       return;
     }
-    currentUser = data.user;
+    currentUser = data.user; currentRole = profile.role;
     sessionStorage.setItem('adm', '1');
     await boot();
   }
@@ -332,7 +402,7 @@
     if (session) {
       const { data: profile, error } = await window.alphaSupabase.from('profiles').select('role').eq('id', session.user.id).single();
       if (!error && profile && ['owner','manager','receptionist','trainer'].includes(profile.role)) {
-        currentUser = session.user;
+        currentUser = session.user; currentRole = profile.role;
         sessionStorage.setItem('adm','1'); await boot(); return;
       }
       await window.alphaSupabase.auth.signOut();
@@ -340,7 +410,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
+  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate();
 })();
