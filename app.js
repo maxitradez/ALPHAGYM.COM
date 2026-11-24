@@ -21,6 +21,20 @@
     if (error) throw error;
     S.data.memberships = data || [];
   }
+  async function loadPaymentsFromDatabase() {
+    const { data, error } = await db.from('payments')
+      .select('id,gym_member_id,membership_id,amount,method,reference,received_at,notes,member_memberships(plan_id,start_date,end_date)')
+      .not('gym_member_id', 'is', null).order('received_at', { ascending: false });
+    if (error) throw error;
+    S.data.payments = (data || []).map(p => ({
+      id:p.id, memberId:p.gym_member_id, membershipId:p.membership_id,
+      planId:p.member_memberships?.plan_id || null, amount:Number(p.amount),
+      method:p.method, code:p.reference || '', paid:p.received_at.slice(0,10),
+      receivedAt:p.received_at, start:p.member_memberships?.start_date || null,
+      end:p.member_memberships?.end_date || null, notes:p.notes || ''
+    }));
+  }
+
   async function loadMembersFromDatabase() {
     const { data, error } = await db.from('gym_members')
       .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at')
@@ -45,6 +59,8 @@
   const badge = s => `<span class="badge b-${s.key}">${s.label}</span>`;
   const sub = s => s.key === 'none' ? 'No membership' : s.left < 0 ? `Expired ${-s.left}d ago` : s.left === 0 ? 'Ends today' : `${s.left}d left`;
   function memberMemberships(id) { return (S.data.memberships || []).filter(x => x.gym_member_id === id).sort((a,b) => b.start_date.localeCompare(a.start_date)); }
+  function membershipPaid(id) { return S.data.payments.filter(p => p.membershipId === id).reduce((n,p) => n + Number(p.amount || 0), 0); }
+  function membershipBalance(ms) { return Math.max(0, Number(ms.price_at_purchase) - Number(ms.discount_amount || 0) - membershipPaid(ms.id)); }
   function memberStatus(m) {
     const list = memberMemberships(m.id);
     const current = list.find(x => x.status === 'active' && x.end_date >= S.today()) || list[0];
@@ -199,17 +215,17 @@
   }
 
   V.payments = () => {
-    const t = S.today(), p = [...S.data.payments].sort((a, b) => b.paid.localeCompare(a.paid) || b.end.localeCompare(a.end));
-    const week = S.revenueSince(S.addDays(t, -6)), month = S.revenueSince(t.slice(0, 7) + '-01');
-    let last = '';
+    const t=S.today(), p=[...S.data.payments].sort((a,b)=>b.receivedAt.localeCompare(a.receivedAt));
+    const week=S.revenueSince(S.addDays(t,-6)), month=S.revenueSince(t.slice(0,7)+'-01');
+    let last='';
     return `<h2>Payments</h2>
-    <div class="sum"><div><b>${S.money(S.revenueOn(t))}</b><small>Today</small></div><div><b>${S.money(week)}</b><small>7 days</small></div><div><b>${S.money(month)}</b><small>This month</small></div></div>
-    <button class="btn block ghost" style="margin:0 0 6px" onclick="exportPay()">Export payments (CSV)</button>
-    ${p.slice(0, 60).map(x => {
-      const m = S.member(x.memberId); if (!m) return '';
-      const head = x.paid !== last ? `<h3 style="font-size:.85rem;color:var(--mut)">${S.fmtDate(x.paid)}${x.paid === t ? ' · Today' : ''}</h3>` : ''; last = x.paid;
-      return head + `<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(S.plan(x.planId).name)} · ${x.method}${x.code ? ' · ' + esc(x.code) : ''}<br>Valid ${S.fmtDate(x.start)} → ${S.fmtDate(x.end)}</small></div><div class="right"><b>${S.money(x.amount)}</b></div></div>`;
-    }).join('')}`;
+      <div class="sum"><div><b>${S.money(S.revenueOn(t))}</b><small>Today</small></div><div><b>${S.money(week)}</b><small>7 days</small></div><div><b>${S.money(month)}</b><small>This month</small></div></div>
+      <button class="btn block ghost" style="margin:0 0 6px" onclick="exportPay()">Export payments (CSV)</button>
+      ${p.length ? p.slice(0,100).map(x=>{
+        const m=S.member(x.memberId); if(!m)return '';
+        const plan=S.plan(x.planId), head=x.paid!==last ? `<h3 style="font-size:.85rem;color:var(--mut)">${S.fmtDate(x.paid)}${x.paid===t?' · Today':''}</h3>` : ''; last=x.paid;
+        return head+`<div class="row" onclick="openMember('${m.id}')"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(plan?.name || 'Membership payment')} · ${esc(x.method.toUpperCase())}${x.code?' · '+esc(x.code):''}</small></div><div class="right"><b>${S.money(x.amount)}</b></div></div>`;
+      }).join('') : '<div class="empty">No payments recorded yet.</div>'}`;
   };
   function exportMembers() {
     const rows = [['Name', 'Phone', 'Email', 'Joined', 'Membership status', 'Membership expiry', 'Visits']];
@@ -220,7 +236,7 @@
     download('members.csv', rows);
   }
 
-  function exportPay() { download('payments.csv', [['Date', 'Member', 'Phone', 'Plan', 'Amount', 'Method', 'Code', 'Valid from', 'Valid to'], ...S.data.payments.map(p => { const m = S.member(p.memberId) || {}; return [p.paid, m.name, m.phone, S.plan(p.planId).name, p.amount, p.method, p.code, p.start, p.end]; })]); }
+  function exportPay() { download('payments.csv', [['Date','Member','Phone','Plan','Amount','Method','Reference','Notes'], ...S.data.payments.map(p=>{const m=S.member(p.memberId)||{};return [p.paid,m.name,m.phone,S.plan(p.planId)?.name||'',p.amount,p.method,p.code,p.notes];})]); }
 
   V.reminders = () => {
     const list = S.data.members.map(m => ({ m, s: memberStatus(m) })).filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14)).sort((a, b) => a.s.left - b.s.left);
@@ -241,19 +257,28 @@
 
   // ---------- modals ----------
   function openMember(id) {
-    const m = S.member(id), s = memberStatus(m), inn = S.isInside(id), pays = S.memberPayments(id), vis = S.memberVisits(id);
-    const open = S.data.checkins.find(c => c.memberId === id && !c.out);
-    modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>${esc(m.phone)}${m.email ? ' · ' + esc(m.email) : ''}</small></div>${badge(s)}</div>
-      <div class="prev" style="margin-top:14px">${s.key === 'none' ? 'No membership yet.' : `Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
-      <div class="acts">
-        <button class="btn" onclick="editMember('${id}')">Edit member</button>
-        <button class="btn" onclick="openAssign('${id}')">Assign plan</button>
-        ${inn ? `<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>` : `<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
-        <a class="btn wa" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}">WhatsApp</a>
-        ${m.email ? `<a class="btn ghost" href="${S.mailLink(m)}">Email</a>` : `<button class="btn ghost" onclick="toast('No email on file')">Email</button>`}
-      </div>
-      <h3>Payment history</h3>${pays.length ? pays.slice(0, 5).map(p => `<div class="row"><div class="grow"><b>${S.money(p.amount)} · ${esc(S.plan(p.planId).name)}</b><small>${S.fmtDate(p.paid)} · ${p.method}${p.code ? ' ' + esc(p.code) : ''} · until ${S.fmtDate(p.end)}</small></div></div>`).join('') : '<div class="empty">No payments yet.</div>'}
-      <h3>Recent visits</h3>${vis.length ? vis.slice(0, 5).map(c => `<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(c.in))}</b><small>${S.fmtTime(c.in)} → ${c.out ? S.fmtTime(c.out) : 'inside'}</small></div></div>`).join('') : '<div class="empty">No visits yet.</div>'}
+    const m=S.member(id), s=memberStatus(m), inn=S.isInside(id);
+    const pays=S.data.payments.filter(p=>p.memberId===id).sort((a,b)=>b.receivedAt.localeCompare(a.receivedAt));
+    const vis=S.memberVisits(id), memberships=memberMemberships(id);
+    const open=S.data.checkins.find(c=>c.memberId===id&&!c.out);
+    const membershipHtml=memberships.length ? memberships.map(ms=>{
+      const plan=S.plan(ms.plan_id), due=membershipBalance(ms);
+      return `<div class="card" style="margin:8px 0;padding:12px">
+        <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(plan?.name||'Membership')}</b><span class="badge b-${ms.status}">${esc(ms.status)}</span></div>
+        <small>${S.fmtDate(ms.start_date)} → ${S.fmtDate(ms.end_date)} · Total ${S.money(Number(ms.price_at_purchase)-Number(ms.discount_amount||0))}</small>
+        <p style="margin:8px 0 0">Paid: <b>${S.money(Number(ms.price_at_purchase)-Number(ms.discount_amount||0)-due)}</b> · Balance: <b>${S.money(due)}</b></p>
+        ${due>0 && ms.status!=='cancelled' ? `<button class="btn sm" style="margin-top:8px" onclick="openPay('${id}','${ms.id}')">Record payment</button>` : '<small class="mut">No outstanding balance</small>'}
+      </div>`;
+    }).join('') : '<div class="empty">No membership assigned yet.</div>';
+    modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>${esc(m.phone)}${m.email?' · '+esc(m.email):''}</small></div>${badge(s)}</div>
+      <div class="prev" style="margin-top:14px">${s.key==='none'?'No membership yet.':`Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
+      <div class="acts"><button class="btn" onclick="editMember('${id}')">Edit member</button><button class="btn" onclick="openAssign('${id}')">Assign plan</button>
+      ${inn?`<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>`:`<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
+      <a class="btn wa" target="_blank" rel="noopener" href="${S.waLink(m.phone,S.reminderMsg(m))}">WhatsApp</a>
+      ${m.email?`<a class="btn ghost" href="${S.mailLink(m)}">Email</a>`:`<button class="btn ghost" onclick="toast('No email on file')">Email</button>`}</div>
+      <h3>Memberships & balances</h3>${membershipHtml}
+      <h3>Payment history</h3>${pays.length?pays.slice(0,10).map(p=>`<div class="row"><div class="grow"><b>${S.money(p.amount)} · ${esc(S.plan(p.planId)?.name||'Membership')}</b><small>${S.fmtDate(p.paid)} · ${esc(p.method.toUpperCase())}${p.code?' · '+esc(p.code):''}${p.notes?' · '+esc(p.notes):''}</small></div></div>`).join(''):'<div class="empty">No payments recorded.</div>'}
+      <h3>Recent visits</h3>${vis.length?vis.slice(0,5).map(v=>`<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(v.in))}</b><small>${S.fmtTime(v.in)} → ${v.out?S.fmtTime(v.out):'inside'}</small></div></div>`).join(''):'<div class="empty">No visits yet.</div>'}
       <button class="btn block ghost" style="color:var(--red)" onclick="delMember('${id}')">Archive member</button>`);
   }
   async function delMember(id) {
@@ -333,30 +358,31 @@
     if(error){databaseError(error);return;} try{await loadMembershipsFromDatabase();}catch(e){databaseError(e);return;}
     closeModal();toast('Membership assigned');openMember(id);refresh();
   }
-  function openPay(id, thenIn) {
-    toast('Membership assignment and payment recording are being connected next.');
-    return;
-    const m = S.member(id), last = S.memberPayments(id)[0];
-    modal(`<h3>Payment · ${esc(m.name)}</h3>
-      <label>Plan</label><select id="pl" onchange="updPrev('${id}')">${S.data.plans.map(p => `<option value="${p.id}" ${(last ? last.planId : 'monthly') === p.id ? 'selected' : ''}>${esc(p.name)} · ${S.money(p.price)}</option>`).join('')}</select>
-      <div class="prev" id="prev"></div>
-      <label>Paid by</label><select id="me" onchange="$('#cw').style.display=this.value==='M-Pesa'?'block':'none'"><option>M-Pesa</option><option>Cash</option></select>
-      <div id="cw"><label>M-Pesa code</label><input id="c" placeholder="e.g. SHK3L9XQ2P" style="text-transform:uppercase"></div>
-      <button class="btn block" onclick="savePay('${id}',${!!thenIn})">Record payment</button>`);
-    updPrev(id);
+  function openPay(id,membershipId) {
+    const m=S.member(id), ms=memberMemberships(id).find(x=>x.id===membershipId);
+    if(!m||!ms){toast('Membership record not found');return;}
+    const due=membershipBalance(ms); if(due<=0){toast('This membership is fully paid');return;}
+    const plan=S.plan(ms.plan_id);
+    modal(`<h3>Record payment · ${esc(m.name)}</h3>
+      <div class="prev"><b>${esc(plan?.name||'Membership')}</b><br>Total outstanding: <b>${S.money(due)}</b><br><small>${S.fmtDate(ms.start_date)} → ${S.fmtDate(ms.end_date)}</small></div>
+      <label>Amount received (KES)</label><input id="payment-amount" type="number" min="0.01" max="${due.toFixed(2)}" step="0.01" value="${due.toFixed(2)}">
+      <label>Payment method</label><select id="payment-method"><option value="mpesa">M-Pesa</option><option value="cash">Cash</option><option value="bank">Bank transfer</option><option value="other">Other</option></select>
+      <label>Transaction reference (optional)</label><input id="payment-reference" maxlength="120" placeholder="M-Pesa code / bank reference">
+      <label>Notes (optional)</label><textarea id="payment-notes" rows="2"></textarea>
+      <p class="mut" style="font-size:.82rem">Partial payments are supported. Any remaining balance stays outstanding.</p>
+      <button class="btn block" onclick="savePay('${id}','${membershipId}')">Save payment</button><button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
   }
-  function updPrev(id) {
-    const x = S.previewPeriod(id, $('#pl').value);
-    $('#prev').innerHTML = `Amount <b>${S.money(x.plan.price)}</b><br>Membership <b>${S.fmtDate(x.start)}</b> → <b>${S.fmtDate(x.end)}</b>`;
-  }
-  function savePay(id, thenIn) {
-    const p = S.addPayment(id, $('#pl').value, $('#me').value, $('#c').value), m = S.member(id);
-    if (thenIn) S.checkIn(id);
-    const msg = `Hi ${m.name.split(' ')[0]}, we received ${S.money(p.amount)} at ${S.CONFIG.gym}. Your membership is valid until ${S.fmtDate(p.end)}. Thank you.`;
-    modal(`<div style="text-align:center;padding:10px 0"><h3>Payment recorded</h3><p class="mut" style="margin:6px 0 16px">${S.money(p.amount)} · valid until <b style="color:var(--txt)">${S.fmtDate(p.end)}</b></p></div>
-      <a class="btn wa block" target="_blank" rel="noopener" href="${S.waLink(m.phone, msg)}">Send receipt on WhatsApp</a>
-      <button class="btn block ghost" onclick="closeModal()">Done</button>`);
-    refresh();
+  async function savePay(id,membershipId) {
+    const ms=memberMemberships(id).find(x=>x.id===membershipId);
+    const amount=Number($('#payment-amount').value), method=$('#payment-method').value;
+    const reference=$('#payment-reference').value.trim(), notes=$('#payment-notes').value.trim();
+    if(!ms||!Number.isFinite(amount)||amount<=0||amount>membershipBalance(ms)+0.00001){toast('Enter an amount greater than zero and no more than the outstanding balance');return;}
+    const {error}=await db.from('payments').insert({gym_member_id:id,membership_id:membershipId,amount,currency:'KES',method,reference:reference||null,notes:notes||null});
+    if(error){databaseError(error);return;}
+    try{await loadPaymentsFromDatabase();}catch(e){databaseError(e);return;}
+    const remaining=membershipBalance(ms); closeModal();
+    toast(remaining<=0?'Membership fully paid':'Payment saved · balance '+S.money(remaining));
+    openMember(id); refresh();
   }
 
   function openSettings() {
@@ -381,7 +407,7 @@
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
-    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]); }
+    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase(), loadPaymentsFromDatabase()]); }
     catch (error) {
       databaseError(error);
       $('#view').innerHTML = '<div class="empty">Could not load member records from the Alpha Gym database. Check your connection and reload.</div>';
