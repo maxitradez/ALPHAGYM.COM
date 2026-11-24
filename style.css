@@ -164,3 +164,26 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .profile-details>div:last-child{border-bottom:0}
 .profile-details small{display:block;font-size:.72rem;margin-bottom:3px}
 .profile-details b{display:block;font-size:.92rem;overflow-wrap:anywhere}
+
+/* ---------- group classes ---------- */
+.class-date-card{padding:14px;margin:10px 0 14px}
+.class-date-card label{display:block;font-weight:700;margin-bottom:6px}
+.class-date-card input{margin:0 0 6px}
+.class-date-card small{display:block}
+.class-note{display:flex;flex-direction:column;gap:4px;padding:12px 14px;margin:12px 0;background:var(--card2);border:1px solid var(--line);border-radius:12px}
+.class-note span,.class-card small{font-size:.78rem;color:var(--mut)}
+.class-day{margin:18px 0}
+.class-day h3{margin-bottom:8px}
+.class-card{padding:14px;margin:9px 0}
+.class-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.class-card-top .grow{min-width:0}
+.class-card-top b{display:block}
+.class-card-top small{display:block;margin-top:3px}
+.class-time{font-weight:800;font-size:1.02rem;margin:12px 0 7px}
+.class-card-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:12px}
+.class-card-actions .mut{margin-right:auto;font-size:.76rem}
+.class-inactive{opacity:.68}
+.class-attendance-list{margin:16px 0;max-height:260px;overflow:auto}
+.class-attendance-list>.row{padding:9px 0}
+.class-footnote{font-size:.8rem;margin-top:14px}
+@media(min-width:760px){.class-card{padding:17px}.class-card-actions{gap:9px}}
