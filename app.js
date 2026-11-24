@@ -167,7 +167,7 @@
   V.profile = () => {
     const p = currentProfile || {};
     const name = p.full_name || 'Name not set';
-    const email = p.email || currentUser?.email || 'Not available';
+    const email = currentUser?.email || p.email || 'Not available';
     const phone = p.phone || 'Not provided';
     const role = currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : 'Staff';
     const active = !!p.is_active;
@@ -191,22 +191,40 @@
     const canManage = ['owner','manager'].includes(currentRole);
     modal(`<h3>Edit profile</h3>
       <label>Full name</label><input id="profile-name" maxlength="120" value="${esc(p.full_name || '')}" placeholder="Enter your full name">
-      ${canManage ? `<label>Phone number</label><input id="profile-phone" maxlength="40" value="${esc(p.phone || '')}" placeholder="Enter phone number">` : ''}
-      <p class="mut" style="font-size:.82rem;margin:10px 0">Email, role and account status cannot be changed here.</p>
+      ${canManage ? `<label>Phone number</label><input id="profile-phone" maxlength="40" value="${esc(p.phone || '')}" placeholder="Enter phone number">
+      <label>Email address</label><input id="profile-email" type="email" maxlength="254" value="${esc(currentUser?.email || p.email || '')}" placeholder="Enter email address">` : ''}
+      <p class="mut" style="font-size:.82rem;margin:10px 0">${canManage ? 'Email changes require verification. Role and account status remain protected.' : 'You can edit your full name only. Email, phone, role and account status are managed by the owner or manager.'}</p>
       <button class="btn block" onclick="saveProfile()">Save changes</button>
       <button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
   }
   async function saveProfile() {
     const fullName = ($('#profile-name') || {}).value?.trim() || '';
     if (fullName.length < 2) { toast('Enter your full name'); return; }
+    const canManage = ['owner','manager'].includes(currentRole);
     const updates = { full_name: fullName };
-    if (['owner','manager'].includes(currentRole)) updates.phone = ($('#profile-phone') || {}).value?.trim() || null;
+    if (canManage) updates.phone = ($('#profile-phone') || {}).value?.trim() || null;
+    const newEmail = canManage ? ($('#profile-email') || {}).value?.trim() || '' : '';
+    const currentEmail = String(currentUser?.email || currentProfile?.email || '').trim();
+    if (canManage && (!newEmail || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(newEmail))) {
+      toast('Enter a valid email address'); return;
+    }
     const { data, error } = await db.from('profiles').update(updates).eq('id', currentUser.id)
       .select('full_name,email,phone,role,is_active').single();
     if (error) { databaseError(error); return; }
     currentProfile = data;
+    let emailPending = false;
+    if (canManage && newEmail.toLowerCase() !== currentEmail.toLowerCase()) {
+      const { error: emailError } = await db.auth.updateUser({ email: newEmail });
+      if (emailError) {
+        closeModal();
+        toast('Name and phone saved, but email change failed: ' + emailError.message);
+        render();
+        return;
+      }
+      emailPending = true;
+    }
     closeModal();
-    toast('Profile updated');
+    toast(emailPending ? 'Profile saved. Confirm the email change using the verification message.' : 'Profile updated');
     render();
   }
 
