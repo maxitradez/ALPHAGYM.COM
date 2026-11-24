@@ -1,6 +1,6 @@
 {
-  "name": "IronForge Fitness Manager",
-  "short_name": "IronForge",
+  "name": "Alpha Gym Management",
+  "short_name": "Alpha Gym",
   "start_url": "app.html",
   "scope": "./",
   "display": "standalone",
