@@ -106,26 +106,57 @@
   // ---------- views ----------
   const V = {}, after = {};
   V.home = () => {
-    const t = S.today(), st = S.data.members.map(m => ({ m, s: memberStatus(m) }));
-    const active = st.filter(x => x.s.key === 'active' || x.s.key === 'expiring').length;
+    const t = S.today(), monthStart = t.slice(0, 7) + '-01';
+    const st = S.data.members.map(m => ({ m, s: memberStatus(m) }));
+    const active = st.filter(x => x.s.key === 'active').length;
     const exp = st.filter(x => x.s.key === 'expiring').sort((a, b) => a.s.left - b.s.left);
     const expired = st.filter(x => x.s.key === 'expired').length;
+    const monthNew = S.data.members.filter(m => m.joined >= monthStart).length;
+    const monthRevenue = S.revenueSince(monthStart);
+    const todayRevenue = S.revenueOn(t);
+    const outstanding = (S.data.memberships || [])
+      .filter(ms => ms.status !== 'cancelled')
+      .reduce((total, ms) => total + membershipBalance(ms), 0);
+    const todayVisits = S.data.checkins.filter(c => S.ymd(c.in) === t);
+    const recent = todayVisits.slice(0, 5);
     return `
+    <div class="dash-head">
+      <div><h2>Dashboard</h2><p>Alpha Gym at a glance</p></div>
+      <span class="dash-live"><i></i> Live records</span>
+    </div>
+    <div class="dash-actions">
+      <button class="btn" onclick="go('checkin')">＋ Check in member</button>
+      <button class="btn ghost" onclick="go('members')">＋ Add / view members</button>
+    </div>
+    <h3 class="dash-label">Membership overview</h3>
     <div class="stats">
-      <div class="stat hi"><small>Inside now</small><b>${S.inside().length}</b></div>
-      <div class="stat"><small>Check-ins today</small><b>${S.checkinsOn(t).length}</b></div>
-      <div class="stat"><small>Active members</small><b>${active}</b></div>
-      <div class="stat"><small>Revenue this month</small><b style="font-size:1.25rem;margin-top:8px">${S.money(S.revenueSince(t.slice(0, 7) + '-01'))}</b></div>
-      <div class="stat warn"><small>Expiring (≤${S.CONFIG.reminderDays} days)</small><b>${exp.length}</b></div>
-      <div class="stat bad"><small>Expired</small><b>${expired}</b></div>
+      <div class="stat hi"><small>Total members</small><b>${S.data.members.length}</b><em>+${monthNew} this month</em></div>
+      <div class="stat"><small>Active memberships</small><b>${active}</b></div>
+      <div class="stat warn"><small>Expiring soon</small><b>${exp.length}</b></div>
+      <div class="stat bad"><small>Expired memberships</small><b>${expired}</b></div>
+    </div>
+    <h3 class="dash-label">Today's activity</h3>
+    <div class="stats">
+      <div class="stat"><small>Inside now</small><b>${S.inside().length}</b></div>
+      <div class="stat"><small>Check-ins today</small><b>${todayVisits.length}</b></div>
+    </div>
+    <h3 class="dash-label">Financial overview</h3>
+    <div class="stats">
+      <div class="stat"><small>Collected today</small><b class="stat-money">${S.money(todayRevenue)}</b></div>
+      <div class="stat"><small>Collected this month</small><b class="stat-money">${S.money(monthRevenue)}</b></div>
+      <div class="stat warn"><small>Outstanding balances</small><b class="stat-money">${S.money(outstanding)}</b></div>
     </div>
     <h3>Revenue · last 7 days</h3><div class="card">${bars(S.lastDays(7, S.revenueOn), k)}</div>
     <h3>Attendance · last 7 days</h3><div class="card">${bars(S.lastDays(7, d => S.checkinsOn(d).length))}</div>
+    <h3>Today's check-ins <span class="pill">${todayVisits.length}</span></h3>
+    ${recent.length ? recent.map(c => {
+      const m = S.member(c.memberId); if (!m) return '';
+      return `<div class="row"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${S.fmtTime(c.in)} · ${c.out ? 'Checked out' : 'Currently inside'}</small></div><span class="badge ${c.out ? 'b-none' : 'b-active'}">${c.out ? 'Out' : 'Inside'}</span></div>`;
+    }).join('') : '<div class="empty">No check-ins recorded today.</div>'}
     <h3>Expiring soon <span class="pill">${exp.length}</span></h3>
-    ${exp.length ? exp.slice(0, 5).map(x => row(x.m)).join('') : '<div class="empty">Nobody is about to expire</div>'}
-    ${exp.length ? `<button class="btn block ghost" onclick="go('reminders')">Send reminders →</button>` : ''}`;
+    ${exp.length ? exp.slice(0, 5).map(x => row(x.m)).join('') : '<div class="empty">Nobody is about to expire.</div>'}
+    ${exp.length ? `<button class="btn block ghost" onclick="go('reminders')">Review membership reminders →</button>` : ''}`;
   };
-
   V.checkin = () => `<h2>Check-in / out</h2>
     <input id="q" placeholder="Search name or phone…" oninput="drawCI()" autocomplete="off">
     <div id="res"></div>
