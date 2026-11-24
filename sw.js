@@ -1,5 +1,5 @@
-const CACHE = 'alpha-gym-v1';
-const FILES = ['./', 'index.html', 'app.html', 'portal.html', 'style.css', 'store.js', 'app.js', 'icon.svg', 'manifest.json'];
+const CACHE = 'alpha-gym-v2';
+const FILES = ['./', 'index.html', 'app.html', 'portal.html', 'reset-password.html', 'style.css', 'store.js', 'app.js', 'icon.svg', 'manifest.json'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))).then(() => self.clients.claim())); });
 // network-first so updates show immediately; falls back to cache when offline
