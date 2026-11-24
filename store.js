@@ -1,17 +1,17 @@
-/* IronForge demo data layer. Runs fully in the browser (localStorage).
+/* Alpha Gym application data layer.
    Swap this file for a Supabase-backed version when the client signs. */
 (function () {
-  const KEY = 'ironforge_demo_v1', SESSION = 'ironforge_session', DAY = 864e5;
+  const KEY = 'alpha_gym_local_v1', SESSION = 'alpha_gym_session', DAY = 864e5;
 
   // ---- EDIT THESE PER CLIENT ----
   const CONFIG = {
-    gym: 'IronForge Fitness',
+    gym: 'Alpha Gym',
     tag: 'Train hard. Recover harder.',
     phone: '254700000000',      // WhatsApp format, no +
     display: '0700 000 000',
     till: '123456',             // M-Pesa till / paybill shown to members
     area: 'Nairobi, Kenya',
-    pin: '1234',                // owner PIN for the demo
+    pin: '1234',                // Temporary local access PIN; replace with Supabase Auth
     reminderDays: 3             // "expiring" window
   };
 
@@ -132,9 +132,9 @@
     lastDays(n, fn) { const t = today(); return Array.from({ length: n }, (_, i) => { const date = addDays(t, i - n + 1); return { date, val: fn(date) }; }); },
     reminderMsg(m) {
       const s = S.status(m), first = m.name.split(' ')[0];
-      if (s.key === 'none') return `Hi ${first}, welcome to ${CONFIG.gym}! Pick a plan at the front desk or pay via M-Pesa Till ${CONFIG.till}. 💪`;
+      if (s.key === 'none') return `Hi ${first}, welcome to ${CONFIG.gym}! Pick a plan at the front desk or pay via M-Pesa Till ${CONFIG.till}.`;
       const when = s.left < 0 ? `expired on ${S.fmtDate(s.end)}` : s.left === 0 ? 'ends today' : `ends on ${S.fmtDate(s.end)} (${s.left} day${s.left > 1 ? 's' : ''} left)`;
-      return `Hi ${first}, this is ${CONFIG.gym}. Your membership ${when}. Renew via M-Pesa Till ${CONFIG.till} or at the front desk. See you soon! 💪`;
+      return `Hi ${first}, this is ${CONFIG.gym}. Your membership ${when}. Renew via M-Pesa Till ${CONFIG.till} or at the front desk. See you soon!`;
     },
     waLink: (phone, msg) => `https://wa.me/${normPhone(phone)}?text=${encodeURIComponent(msg)}`,
     mailLink: (m) => `mailto:${m.email}?subject=${encodeURIComponent(CONFIG.gym + ' membership reminder')}&body=${encodeURIComponent(S.reminderMsg(m))}`,
