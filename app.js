@@ -249,7 +249,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, doIn, doOut, forceIn, setFilter, openMember, delMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, render });
+  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, doIn, doOut, forceIn, setFilter, openMember, delMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate();
 })();
