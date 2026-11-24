@@ -1,7 +1,7 @@
 (function () {
   const S = Store, $ = s => document.querySelector(s), esc = S.esc;
   let route = 'home', filter = 'all';
-  const TABS = [['home', '🏠', 'Home'], ['checkin', '✅', 'Check-in'], ['members', '👥', 'Members'], ['payments', '💳', 'Payments'], ['reminders', '🔔', 'Reminders']];
+  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['payments', '04', 'Payments'], ['reminders', '05', 'Reminders']];
 
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -40,12 +40,12 @@
     <h3>Revenue · last 7 days</h3><div class="card">${bars(S.lastDays(7, S.revenueOn), k)}</div>
     <h3>Attendance · last 7 days</h3><div class="card">${bars(S.lastDays(7, d => S.checkinsOn(d).length))}</div>
     <h3>Expiring soon <span class="pill">${exp.length}</span></h3>
-    ${exp.length ? exp.slice(0, 5).map(x => row(x.m)).join('') : '<div class="empty">Nobody is about to expire 🎉</div>'}
+    ${exp.length ? exp.slice(0, 5).map(x => row(x.m)).join('') : '<div class="empty">Nobody is about to expire</div>'}
     ${exp.length ? `<button class="btn block ghost" onclick="go('reminders')">Send reminders →</button>` : ''}`;
   };
 
   V.checkin = () => `<h2>Check-in / out</h2>
-    <input id="q" placeholder="🔍  Search name or phone…" oninput="drawCI()" autocomplete="off">
+    <input id="q" placeholder="Search name or phone…" oninput="drawCI()" autocomplete="off">
     <div id="res"></div>
     <h3>Inside now <span class="pill" id="cnt"></span></h3><div id="inside"></div>`;
   after.checkin = () => drawCI();
@@ -74,13 +74,13 @@
         <button class="btn block ghost" onclick="forceIn('${id}')">Let in anyway</button>
         <button class="btn block ghost" onclick="closeModal()">Cancel</button>`); return;
     }
-    S.checkIn(id); toast(`✅ ${m.name} checked in` + (s.key === 'expiring' ? ` · ${s.left === 0 ? 'ends today' : s.left + 'd left'}` : '')); refresh();
+    S.checkIn(id); toast(`${m.name} checked in` + (s.key === 'expiring' ? ` · ${s.left === 0 ? 'ends today' : s.left + 'd left'}` : '')); refresh();
   }
   function forceIn(id) { S.checkIn(id); closeModal(); toast('Checked in (expired)'); refresh(); }
-  function doOut(cid) { S.checkOut(cid); toast('👋 Checked out'); refresh(); }
+  function doOut(cid) { S.checkOut(cid); toast('Checked out'); refresh(); }
 
   V.members = () => `<h2>Members <span class="pill">${S.data.members.length}</span></h2>
-    <input id="q" placeholder="🔍  Search members…" oninput="drawMembers()" autocomplete="off">
+    <input id="q" placeholder="Search members…" oninput="drawMembers()" autocomplete="off">
     <div class="chips" id="chips"></div><div id="res"></div>
     <button class="fab" onclick="openAdd()">+</button>`;
   after.members = () => drawMembers();
@@ -101,7 +101,7 @@
     let last = '';
     return `<h2>Payments</h2>
     <div class="sum"><div><b>${S.money(S.revenueOn(t))}</b><small>Today</small></div><div><b>${S.money(week)}</b><small>7 days</small></div><div><b>${S.money(month)}</b><small>This month</small></div></div>
-    <button class="btn block ghost" style="margin:0 0 6px" onclick="exportPay()">⬇️ Export payments (CSV)</button>
+    <button class="btn block ghost" style="margin:0 0 6px" onclick="exportPay()">Export payments (CSV)</button>
     ${p.slice(0, 60).map(x => {
       const m = S.member(x.memberId); if (!m) return '';
       const head = x.paid !== last ? `<h3 style="font-size:.85rem;color:var(--mut)">${S.fmtDate(x.paid)}${x.paid === t ? ' · Today' : ''}</h3>` : ''; last = x.paid;
@@ -113,11 +113,11 @@
   V.reminders = () => {
     const list = S.data.members.map(m => ({ m, s: S.status(m) })).filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14)).sort((a, b) => a.s.left - b.s.left);
     return `<h2>Reminders</h2>
-    <div class="autocard"><b>🤖 Automatic reminders: ON</b><br>Members with accounts get an email <b>${S.CONFIG.reminderDays} days before</b> expiry, <b>on the day</b>, and <b>3 days after</b>. Below: everyone who needs a nudge, with one-tap WhatsApp.</div>
-    ${list.length ? `<button class="btn block" style="margin:0 0 12px" onclick="queueAll()">📧 Email all ${list.length} now</button>` : ''}
+    <div class="autocard"><b>Reminder management</b><br>Members with accounts get an email <b>${S.CONFIG.reminderDays} days before</b> expiry, <b>on the day</b>, and <b>3 days after</b>. Below: everyone who needs a nudge, with one-tap WhatsApp.</div>
+    ${list.length ? `<button class="btn block" style="margin:0 0 12px" onclick="queueAll()">Email all ${list.length} now</button>` : ''}
     ${list.length ? list.map(({ m, s }) => {
       const done = S.remindedToday(m.id);
-      return `<div class="row"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(sub(s))} · ${badge(s)} ${done ? '· ✅ sent today' : ''}</small></div>
+      return `<div class="row"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(sub(s))} · ${badge(s)} ${done ? '· sent today' : ''}</small></div>
       <a class="btn wa sm" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}" onclick="logRem('${m.id}','whatsapp')">WhatsApp</a></div>`;
     }).join('') : '<div class="empty">All caught up. No reminders needed today 🎉</div>'}`;
   };
@@ -125,7 +125,7 @@
   function queueAll() {
     const list = S.data.members.filter(m => { const s = S.status(m); return s.key === 'expiring' || (s.key === 'expired' && s.left >= -14); });
     list.forEach(m => S.logReminder(m.id, 'email'));
-    toast(`📧 ${list.length} reminder emails queued`); render();
+    toast(`${list.length} reminder emails queued`); render();
   }
 
   // ---------- modals ----------
@@ -135,7 +135,7 @@
     modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>${esc(m.phone)}${m.email ? ' · ' + esc(m.email) : ''}</small></div>${badge(s)}</div>
       <div class="prev" style="margin-top:14px">${s.key === 'none' ? 'No membership yet.' : `Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
       <div class="acts">
-        <button class="btn" onclick="openPay('${id}')">💳 Add payment</button>
+        <button class="btn" onclick="openPay('${id}')">Add payment</button>
         ${inn ? `<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>` : `<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
         <a class="btn wa" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}">WhatsApp</a>
         ${m.email ? `<a class="btn ghost" href="${S.mailLink(m)}">Email</a>` : `<button class="btn ghost" onclick="toast('No email on file')">Email</button>`}
@@ -161,7 +161,7 @@
     if (!n || p.replace(/\D/g, '').length < 9) { toast('Enter a name and valid phone'); return; }
     const m = S.addMember({ name: n, phone: p, email: $('#e').value });
     const plan = $('#pl').value; if (plan) S.addPayment(m.id, plan, $('#me').value, $('#c').value);
-    closeModal(); toast('✅ Member added'); refresh();
+    closeModal(); toast('Member added'); refresh();
   }
 
   function openPay(id, thenIn) {
@@ -181,8 +181,8 @@
   function savePay(id, thenIn) {
     const p = S.addPayment(id, $('#pl').value, $('#me').value, $('#c').value), m = S.member(id);
     if (thenIn) S.checkIn(id);
-    const msg = `Hi ${m.name.split(' ')[0]}, we received ${S.money(p.amount)} at ${S.CONFIG.gym}. Your membership is valid until ${S.fmtDate(p.end)}. Thank you! 💪`;
-    modal(`<div style="text-align:center;padding:10px 0"><div style="font-size:3rem">✅</div><h3>Payment recorded</h3><p class="mut" style="margin:6px 0 16px">${S.money(p.amount)} · valid until <b style="color:var(--txt)">${S.fmtDate(p.end)}</b></p></div>
+    const msg = `Hi ${m.name.split(' ')[0]}, we received ${S.money(p.amount)} at ${S.CONFIG.gym}. Your membership is valid until ${S.fmtDate(p.end)}. Thank you.`;
+    modal(`<div style="text-align:center;padding:10px 0"><h3>Payment recorded</h3><p class="mut" style="margin:6px 0 16px">${S.money(p.amount)} · valid until <b style="color:var(--txt)">${S.fmtDate(p.end)}</b></p></div>
       <a class="btn wa block" target="_blank" rel="noopener" href="${S.waLink(m.phone, msg)}">Send receipt on WhatsApp</a>
       <button class="btn block ghost" onclick="closeModal()">Done</button>`);
     refresh();
@@ -190,11 +190,11 @@
 
   function openSettings() {
     modal(`<h3>Settings</h3>
-      <button class="btn block ghost" onclick="exportMembers()">⬇️ Export members (CSV)</button>
-      <button class="btn block ghost" onclick="exportPay()">⬇️ Export payments (CSV)</button>
-      <button class="btn block ghost" onclick="if(confirm('Reset all demo data?')){Store.reset();closeModal();render();toast('Demo data reset')}">♻️ Reset demo data</button>
+      <button class="btn block ghost" onclick="exportMembers()">Export members (CSV)</button>
+      <button class="btn block ghost" onclick="exportPay()">Export payments (CSV)</button>
+      <button class="btn block ghost" onclick="if(confirm('Clear locally stored application data?')){Store.reset();closeModal();render();toast('Local data cleared')}">Clear local data</button>
       <button class="btn block ghost" onclick="sessionStorage.removeItem('adm');location.reload()">Lock app</button>
-      <p class="mut" style="margin-top:14px;font-size:.8rem;text-align:center">Demo mode: data is stored on this device only.</p>`);
+      <p class="mut" style="margin-top:14px;font-size:.8rem;text-align:center"></p>`);
   }
   function exportMembers() { download('members.csv', [['Name', 'Phone', 'Email', 'Joined', 'Status', 'Valid until'], ...S.data.members.map(m => { const s = S.status(m); return [m.name, m.phone, m.email, m.joined, s.label, s.end || '']; })]); }
 
@@ -220,7 +220,7 @@
     $('#gate').innerHTML = `<div class="gatebox"><h1>${esc(S.CONFIG.gym.split(' ')[0])}<span>.</span></h1><p class="mut" style="margin-bottom:18px">Owner access</p>
       <input id="pin" type="password" inputmode="numeric" placeholder="Enter PIN" style="text-align:center;font-size:1.3rem" onkeydown="if(event.key==='Enter')unlock()">
       <div class="err" id="perr"></div><button class="btn block" onclick="unlock()">Unlock</button>
-      <p class="mut" style="margin-top:14px;font-size:.8rem">Demo PIN: ${S.CONFIG.pin}</p></div>`;
+      <p class="mut" style="margin-top:14px;font-size:.8rem"></p></div>`;
   }
 
   Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, doIn, doOut, forceIn, setFilter, openMember, delMember, openAdd, saveMember, openPay, updPrev, savePay, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, render });
