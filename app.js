@@ -23,16 +23,19 @@
   }
   async function loadPaymentsFromDatabase() {
     const { data, error } = await db.from('payments')
-      .select('id,gym_member_id,membership_id,amount,method,reference,received_at,notes,member_memberships(plan_id,start_date,end_date)')
+      .select('id,gym_member_id,membership_id,amount,method,reference,received_at,notes')
       .not('gym_member_id', 'is', null).order('received_at', { ascending: false });
     if (error) throw error;
-    S.data.payments = (data || []).map(p => ({
-      id:p.id, memberId:p.gym_member_id, membershipId:p.membership_id,
-      planId:p.member_memberships?.plan_id || null, amount:Number(p.amount),
-      method:p.method, code:p.reference || '', paid:p.received_at.slice(0,10),
-      receivedAt:p.received_at, start:p.member_memberships?.start_date || null,
-      end:p.member_memberships?.end_date || null, notes:p.notes || ''
-    }));
+    S.data.payments = (data || []).map(p => {
+      const membership = (S.data.memberships || []).find(ms => ms.id === p.membership_id);
+      return {
+        id:p.id, memberId:p.gym_member_id, membershipId:p.membership_id,
+        planId:membership?.plan_id || null, amount:Number(p.amount),
+        method:p.method, code:p.reference || '', paid:p.received_at.slice(0,10),
+        receivedAt:p.received_at, start:membership?.start_date || null,
+        end:membership?.end_date || null, notes:p.notes || ''
+      };
+    });
   }
 
   async function loadMembersFromDatabase() {
@@ -407,12 +410,15 @@
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
-    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase(), loadPaymentsFromDatabase()]); }
+    try { await Promise.all([loadMembersFromDatabase(), loadPlansFromDatabase(), loadMembershipsFromDatabase()]); }
     catch (error) {
       databaseError(error);
-      $('#view').innerHTML = '<div class="empty">Could not load member records from the Alpha Gym database. Check your connection and reload.</div>';
+      $('#view').innerHTML = '<div class="empty">Could not load core Alpha Gym records. Check your connection and reload.</div>';
       return;
     }
+    // Payments are secondary data: a payment-query issue must never prevent the management shell from opening.
+    try { await loadPaymentsFromDatabase(); }
+    catch (error) { console.error('Alpha Gym payments could not be loaded:', error); S.data.payments = []; }
     $('#brand').innerHTML = esc(S.CONFIG.gym).replace(/^(\S+)/, '<span>$1</span>');
     $('#date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
     const h = location.hash.slice(1); if (V[h]) route = h;
