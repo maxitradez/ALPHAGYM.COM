@@ -166,7 +166,7 @@
   };
   V.profile = () => {
     const p = currentProfile || {};
-    const name = p.full_name || currentUser?.user_metadata?.full_name || (p.email || currentUser?.email || '').split('@')[0] || 'Staff member';
+    const name = p.full_name || currentUser?.user_metadata?.full_name || 'Name not set';
     const email = p.email || currentUser?.email || 'Not available';
     const phone = p.phone || 'Not provided';
     const role = currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : 'Staff';
@@ -182,7 +182,7 @@
           <div><small>Account status</small><b>${active ? 'Active' : 'Inactive'}</b></div>
         </div>
       </div>
-      <p class="mut" style="font-size:.8rem;margin-top:12px">Profile details are managed by the gym owner. Contact management if your name or phone number needs updating.</p>`;
+      <p class="mut" style="font-size:.8rem;margin-top:12px">Profile details are view-only in this version.</p>`;
   };
 
   V.checkin = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Check-in tools are not available to trainer accounts.</div>' : `<h2>Check-in / out</h2>
