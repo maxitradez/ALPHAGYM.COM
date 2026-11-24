@@ -32,7 +32,7 @@ body.app{padding-bottom:84px}
 .top b{font-size:1.05rem}.top b span{color:var(--acc)}
 .top .date{font-size:.75rem;color:var(--mut)}
 #view{padding:16px;max-width:720px;margin:0 auto}
-.tabs{position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(20,24,29,.97);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(8,minmax(0,1fr));padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.tabs{position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(20,24,29,.97);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(9,minmax(0,1fr));padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
 .tabs button{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.68rem;color:var(--mut);padding:6px 0;border-radius:10px}
 .tabs button i{font-style:normal;font-size:1.25rem}
 .tabs button.on{color:var(--acc)}
@@ -135,7 +135,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .sw.on{background:var(--acc)}.sw.on:after{left:23px;background:#0b0d10}
 .err{color:var(--red);font-size:.85rem;margin-bottom:8px}
 
-@media(max-width:420px){.tabs{grid-template-columns:repeat(8,minmax(58px,1fr));overflow-x:auto;justify-content:start}.tabs button{white-space:nowrap;font-size:.62rem}}
+@media(max-width:420px){.tabs{grid-template-columns:repeat(9,minmax(58px,1fr));overflow-x:auto;justify-content:start}.tabs button{white-space:nowrap;font-size:.62rem}}
 
 /* ---------- reports ---------- */
 .report-head{margin-bottom:10px}.report-head h2{margin-bottom:4px}
@@ -152,3 +152,15 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .report-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;margin:8px 0;background:var(--card2);border:1px solid var(--line);border-radius:12px}
 .report-row>div{min-width:0}.report-row b{font-size:.88rem}.report-row small{display:block;font-size:.74rem;overflow-wrap:anywhere;margin-top:3px}
 @media(min-width:760px){.report-card{padding:18px}.report-row{padding:12px 14px;margin:9px 0}.report-kpis{gap:10px}.report-kpis>div{padding:14px}}
+
+/* ---------- staff profile ---------- */
+.profile-card{padding:16px}
+.profile-identity{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.profile-identity .av{width:54px;height:54px;font-size:1rem}
+.profile-identity b{font-size:1.05rem}
+.profile-identity small{display:block;overflow-wrap:anywhere}
+.profile-details{display:grid;gap:0}
+.profile-details>div{padding:13px 2px;border-bottom:1px solid var(--line)}
+.profile-details>div:last-child{border-bottom:0}
+.profile-details small{display:block;font-size:.72rem;margin-bottom:3px}
+.profile-details b{display:block;font-size:.92rem;overflow-wrap:anywhere}
