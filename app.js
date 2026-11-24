@@ -1,6 +1,6 @@
 (function () {
   const S = Store, $ = s => document.querySelector(s), esc = S.esc;
-  let route = 'home', filter = 'all', currentUser = null, currentRole = null;
+  let route = 'home', filter = 'all', currentUser = null, currentProfile = null, currentRole = null;
   let reportFrom = S.today().slice(0, 7) + '-01', reportTo = S.today();
   const db = window.alphaSupabase;
 
@@ -71,7 +71,7 @@
     console.error('Alpha Gym database error:', error);
     toast(error && error.message ? error.message : 'Database request failed');
   }
-  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reports', '06', 'Reports'], ['reminders', '07', 'Reminders'], ['staff', '08', 'Staff']];
+  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reports', '06', 'Reports'], ['reminders', '07', 'Reminders'], ['staff', '08', 'Staff'], ['profile', '09', 'Profile']];
 
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -122,6 +122,16 @@
       .reduce((total, ms) => total + membershipBalance(ms), 0);
     const todayVisits = S.data.checkins.filter(c => S.ymd(c.in) === t);
     const recent = todayVisits.slice(0, 5);
+    const finance = ['owner','manager'].includes(currentRole)
+      ? `<h3 class="dash-label">Financial overview</h3>
+        <div class="stats">
+          <div class="stat"><small>Collected today</small><b class="stat-money">${S.money(todayRevenue)}</b></div>
+          <div class="stat"><small>Collected this month</small><b class="stat-money">${S.money(monthRevenue)}</b></div>
+          <div class="stat warn"><small>Outstanding balances</small><b class="stat-money">${S.money(outstanding)}</b></div>
+        </div>
+        <h3>Revenue · last 7 days</h3><div class="card">${bars(S.lastDays(7, S.revenueOn), k)}</div>`
+      : `<h3 class="dash-label">Front desk collections</h3>
+        <div class="stats"><div class="stat"><small>Collected today</small><b class="stat-money">${S.money(todayRevenue)}</b><em>Payments recorded today</em></div></div>`;
     return `
     <div class="dash-head">
       <div><h2>Dashboard</h2><p>Alpha Gym at a glance</p></div>
@@ -143,13 +153,7 @@
       <div class="stat"><small>Inside now</small><b>${S.inside().length}</b></div>
       <div class="stat"><small>Check-ins today</small><b>${todayVisits.length}</b></div>
     </div>
-    <h3 class="dash-label">Financial overview</h3>
-    <div class="stats">
-      <div class="stat"><small>Collected today</small><b class="stat-money">${S.money(todayRevenue)}</b></div>
-      <div class="stat"><small>Collected this month</small><b class="stat-money">${S.money(monthRevenue)}</b></div>
-      <div class="stat warn"><small>Outstanding balances</small><b class="stat-money">${S.money(outstanding)}</b></div>
-    </div>
-    <h3>Revenue · last 7 days</h3><div class="card">${bars(S.lastDays(7, S.revenueOn), k)}</div>
+    ${finance}
     <h3>Attendance · last 7 days</h3><div class="card">${bars(S.lastDays(7, d => S.checkinsOn(d).length))}</div>
     <h3>Today's check-ins <span class="pill">${todayVisits.length}</span></h3>
     ${recent.length ? recent.map(c => {
@@ -160,6 +164,27 @@
     ${exp.length ? exp.slice(0, 5).map(x => row(x.m)).join('') : '<div class="empty">Nobody is about to expire.</div>'}
     ${exp.length ? `<button class="btn block ghost" onclick="go('reminders')">Review membership reminders →</button>` : ''}`;
   };
+  V.profile = () => {
+    const p = currentProfile || {};
+    const name = p.full_name || currentUser?.user_metadata?.full_name || (p.email || currentUser?.email || '').split('@')[0] || 'Staff member';
+    const email = p.email || currentUser?.email || 'Not available';
+    const phone = p.phone || 'Not provided';
+    const role = currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : 'Staff';
+    const active = !!p.is_active;
+    return `<div class="dash-head"><div><h2>My Profile</h2><p>Your Alpha Gym account details</p></div><span class="badge ${active ? 'b-active' : 'b-expired'}">${active ? 'Active account' : 'Inactive account'}</span></div>
+      <div class="card profile-card">
+        <div class="profile-identity"><div class="av">${ini(name)}</div><div class="grow"><b>${esc(name)}</b><small>${esc(email)}</small></div></div>
+        <div class="profile-details">
+          <div><small>Full name</small><b>${esc(name)}</b></div>
+          <div><small>Email address</small><b>${esc(email)}</b></div>
+          <div><small>Phone number</small><b>${esc(phone)}</b></div>
+          <div><small>Assigned role</small><b>${esc(role)}</b></div>
+          <div><small>Account status</small><b>${active ? 'Active' : 'Inactive'}</b></div>
+        </div>
+      </div>
+      <p class="mut" style="font-size:.8rem;margin-top:12px">Profile details are managed by the gym owner. Contact management if your name or phone number needs updating.</p>`;
+  };
+
   V.checkin = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Check-in tools are not available to trainer accounts.</div>' : `<h2>Check-in / out</h2>
     <input id="q" placeholder="Search name or phone…" oninput="drawCI()" autocomplete="off">
     <div id="res"></div>
@@ -403,11 +428,16 @@
   V.payments = () => {
     if (currentRole === 'trainer') return '<h2>Access restricted</h2><div class="empty">Financial records are not available to trainer accounts.</div>';
     const t=S.today(), p=[...S.data.payments].sort((a,b)=>b.receivedAt.localeCompare(a.receivedAt));
+    const management=['owner','manager'].includes(currentRole);
     const week=S.revenueSince(S.addDays(t,-6)), month=S.revenueSince(t.slice(0,7)+'-01');
+    const summary = management
+      ? `<div class="sum"><div><b>${S.money(S.revenueOn(t))}</b><small>Today</small></div><div><b>${S.money(week)}</b><small>7 days</small></div><div><b>${S.money(month)}</b><small>This month</small></div></div>`
+      : `<div class="sum"><div><b>${S.money(S.revenueOn(t))}</b><small>Collected today</small></div></div>`;
+    const exportButton = management ? '<button class="btn block ghost" style="margin:0 0 6px" onclick="exportPay()">Export payments (CSV)</button>' : '';
     let last='';
     return `<h2>Payments</h2>
-      <div class="sum"><div><b>${S.money(S.revenueOn(t))}</b><small>Today</small></div><div><b>${S.money(week)}</b><small>7 days</small></div><div><b>${S.money(month)}</b><small>This month</small></div></div>
-      <button class="btn block ghost" style="margin:0 0 6px" onclick="exportPay()">Export payments (CSV)</button>
+      ${summary}
+      ${exportButton}
       ${p.length ? p.slice(0,100).map(x=>{
         const m=S.member(x.memberId); if(!m)return '';
         const plan=S.plan(x.planId), head=x.paid!==last ? `<h3 style="font-size:.85rem;color:var(--mut)">${S.fmtDate(x.paid)}${x.paid===t?' · Today':''}</h3>` : ''; last=x.paid;
@@ -505,7 +535,7 @@
     download('members.csv', rows);
   }
 
-  function exportPay() { download('payments.csv', [['Date','Member','Phone','Plan','Amount','Method','Reference','Notes'], ...S.data.payments.map(p=>{const m=S.member(p.memberId)||{};return [p.paid,m.name,m.phone,S.plan(p.planId)?.name||'',p.amount,p.method,p.code,p.notes];})]); }
+  function exportPay() { if (!['owner','manager'].includes(currentRole)) { toast('Payment exports are available to the owner and manager only'); return; } download('payments.csv', [['Date','Member','Phone','Plan','Amount','Method','Reference','Notes'], ...S.data.payments.map(p=>{const m=S.member(p.memberId)||{};return [p.paid,m.name,m.phone,S.plan(p.planId)?.name||'',p.amount,p.method,p.code,p.notes];})]); }
 
   V.reminders = () => {
     const list = S.data.members.map(m => ({ m, s: memberStatus(m) })).filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14)).sort((a, b) => a.s.left - b.s.left);
@@ -691,12 +721,12 @@
   // ---------- shell ----------
   function refresh() { if (route === 'checkin') drawCI(); else if (route === 'members') drawMembers(); else render(); }
   function render() {
-    if (currentRole === 'trainer' && !['home','members'].includes(route)) route = 'home';
+    if (currentRole === 'trainer' && !['home','members','profile'].includes(route)) route = 'home';
     $('#view').innerHTML = V[route](); if (after[route]) after[route]();
-    const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','members'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
+    const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','members','profile'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
     $('#tabs').innerHTML = visibleTabs.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
   }
-  function go(r) { if (currentRole === 'trainer' && !['home','members'].includes(r)) r = 'home'; route = r; location.hash = r; render(); scrollTo(0, 0); }
+  function go(r) { if (currentRole === 'trainer' && !['home','members','profile'].includes(r)) r = 'home'; route = r; location.hash = r; render(); scrollTo(0, 0); }
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
@@ -745,13 +775,13 @@
     const { data, error } = await window.alphaSupabase.auth.signInWithPassword({ email, password });
     if (error) { err.textContent = error.message; btn.disabled = false; btn.textContent = 'Sign in'; return; }
     const { data: profile, error: profileError } = await window.alphaSupabase
-      .from('profiles').select('role,is_active').eq('id', data.user.id).single();
+      .from('profiles').select('full_name,email,phone,role,is_active').eq('id', data.user.id).single();
     if (profileError || !profile || !profile.is_active || !['owner','manager','receptionist','trainer'].includes(profile.role)) {
       await window.alphaSupabase.auth.signOut();
       showGate('This account does not have management access. Contact the gym owner.');
       return;
     }
-    currentUser = data.user; currentRole = profile.role;
+    currentUser = data.user; currentProfile = profile; currentRole = profile.role;
     sessionStorage.setItem('adm', '1');
     await boot();
   }
@@ -768,9 +798,9 @@
   async function gate() {
     const { data: { session } } = await window.alphaSupabase.auth.getSession();
     if (session) {
-      const { data: profile, error } = await window.alphaSupabase.from('profiles').select('role,is_active').eq('id', session.user.id).single();
+      const { data: profile, error } = await window.alphaSupabase.from('profiles').select('full_name,email,phone,role,is_active').eq('id', session.user.id).single();
       if (!error && profile && profile.is_active && ['owner','manager','receptionist','trainer'].includes(profile.role)) {
-        currentUser = session.user; currentRole = profile.role;
+        currentUser = session.user; currentProfile = profile; currentRole = profile.role;
         sessionStorage.setItem('adm','1'); await boot(); return;
       }
       await window.alphaSupabase.auth.signOut();
