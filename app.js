@@ -57,7 +57,7 @@
     console.error('Alpha Gym database error:', error);
     toast(error && error.message ? error.message : 'Database request failed');
   }
-  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reminders', '06', 'Reminders']];
+  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['members', '03', 'Members'], ['plans', '04', 'Plans'], ['payments', '05', 'Payments'], ['reminders', '06', 'Reminders'], ['staff', '07', 'Staff']];
 
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -217,6 +217,74 @@
     const {error}=await db.from('membership_plans').update({is_active:!p.isActive,updated_by:currentUser.id}).eq('id',id);
     if (error) { databaseError(error); return; }
     await loadPlansFromDatabase(); render(); toast(p.isActive ? 'Plan deactivated' : 'Plan activated');
+  }
+
+  let staffRecords = [];
+  V.staff = () => `<h2>Staff management</h2>
+    <p class="mut" style="margin:-6px 0 14px">Invite team members and control their access to Alpha Gym.</p>
+    <div class="sum"><div><b>${staffRecords.length}</b><small>Accounts</small></div><div><b>${staffRecords.filter(x=>x.is_active).length}</b><small>Active</small></div><div><b>${staffRecords.filter(x=>x.role==='trainer').length}</b><small>Trainers</small></div></div>
+    <button class="btn block" onclick="openStaffInvite()">Invite staff member</button>
+    <div id="staff-list"><div class="empty">Loading staff accounts…</div></div>`;
+  after.staff = () => loadStaff();
+  async function staffAction(body) {
+    const {data,error}=await db.functions.invoke('staff-admin',{body});
+    if(error) throw error;
+    if(data?.error) throw new Error(data.error);
+    return data;
+  }
+  async function loadStaff() {
+    const host=$('#staff-list'); if(!host)return;
+    if(currentRole!=='owner'){host.innerHTML='<div class="empty">Only the gym owner can manage staff accounts.</div>';return;}
+    host.innerHTML='<div class="empty">Loading staff accounts…</div>';
+    try {
+      const result=await staffAction({action:'list'});
+      staffRecords=result.staff||[];
+      host.innerHTML=staffRecords.length ? staffRecords.map(s=>`<div class="row">
+        <div class="av">${ini(s.full_name||s.email||'S')}</div>
+        <div class="grow"><b>${esc(s.full_name||'Staff member')}</b><small>${esc(s.email||'No email')} · ${esc(s.phone||'No phone')}</small><small>${esc(s.role)} · ${s.is_active?'Active':'Inactive'}</small></div>
+        <div class="right"><button class="btn sm ghost" onclick="editStaffRole('${s.id}')">Role</button><button class="btn sm ${s.is_active?'red':'ghost'}" onclick="toggleStaff('${s.id}')">${s.is_active?'Disable':'Enable'}</button></div>
+      </div>`).join('') : '<div class="empty">No staff accounts found.</div>';
+    } catch(error) { console.error(error); host.innerHTML='<div class="empty">Could not load staff. '+esc(error.message||'Please retry.')+'</div>'; }
+  }
+  function openStaffInvite() {
+    if(currentRole!=='owner'){toast('Only the owner can invite staff');return;}
+    modal(`<h3>Invite staff member</h3>
+      <label>Full name</label><input id="staff-name" maxlength="100" placeholder="Staff member's full name">
+      <label>Email address</label><input id="staff-email" type="email" maxlength="254" placeholder="name@example.com">
+      <label>Phone (optional)</label><input id="staff-phone" maxlength="30" placeholder="Phone number">
+      <label>Role</label><select id="staff-role"><option value="manager">Manager</option><option value="receptionist">Receptionist</option><option value="trainer">Trainer</option></select>
+      <p class="mut" style="font-size:.82rem">An invitation email will be sent so the staff member can set up their own password. Never share passwords.</p>
+      <button class="btn block" onclick="inviteStaff()">Send invitation</button><button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
+  }
+  async function inviteStaff() {
+    if(currentRole!=='owner')return;
+    const full_name=$('#staff-name').value.trim(), email=$('#staff-email').value.trim().toLowerCase(), phone=$('#staff-phone').value.trim(), role=$('#staff-role').value;
+    if(!full_name||!/^\S+@\S+\.\S+$/.test(email)){toast('Enter a name and valid email address');return;}
+    try {
+      await staffAction({action:'invite',full_name,email,phone:phone||null,role});
+      closeModal();toast('Invitation sent to '+email);await loadStaff();
+    } catch(error){toast(error.message||'Could not send invitation');}
+  }
+  async function editStaffRole(id) {
+    if(currentRole!=='owner')return;
+    const person=staffRecords.find(s=>s.id===id); if(!person||person.role==='owner')return;
+    modal(`<h3>Change staff role</h3><p class="mut">${esc(person.full_name||person.email)}</p>
+      <label>Role</label><select id="staff-role-edit">
+        <option value="manager" ${person.role==='manager'?'selected':''}>Manager</option>
+        <option value="receptionist" ${person.role==='receptionist'?'selected':''}>Receptionist</option>
+        <option value="trainer" ${person.role==='trainer'?'selected':''}>Trainer</option>
+      </select><button class="btn block" onclick="saveStaffRole('${id}')">Save role</button><button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
+  }
+  async function saveStaffRole(id) {
+    try { await staffAction({action:'update',id,role:$('#staff-role-edit').value});closeModal();toast('Staff role updated');await loadStaff(); }
+    catch(error){toast(error.message||'Could not update role');}
+  }
+  async function toggleStaff(id) {
+    if(currentRole!=='owner')return;
+    const person=staffRecords.find(s=>s.id===id);if(!person||person.role==='owner'||id===currentUser.id)return;
+    if(!confirm((person.is_active?'Disable':'Enable')+' access for '+(person.full_name||person.email)+'?'))return;
+    try { await staffAction({action:person.is_active?'disable':'enable',id});toast(person.is_active?'Staff access disabled':'Staff access enabled');await loadStaff(); }
+    catch(error){toast(error.message||'Could not update staff access');}
   }
 
   V.payments = () => {
@@ -425,7 +493,7 @@
   function refresh() { if (route === 'checkin') drawCI(); else if (route === 'members') drawMembers(); else render(); }
   function render() {
     $('#view').innerHTML = V[route](); if (after[route]) after[route]();
-    $('#tabs').innerHTML = TABS.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
+    $('#tabs').innerHTML = TABS.filter(([r]) => r!=='staff' || currentRole==='owner').map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
   }
   function go(r) { route = r; location.hash = r; render(); scrollTo(0, 0); }
   async function boot() {
@@ -497,7 +565,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render });
+  Object.assign(window, { $, toast, closeModal, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
