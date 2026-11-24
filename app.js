@@ -208,6 +208,20 @@
     sessionStorage.removeItem('adm');
     location.reload();
   }
+  // ---------- shell ----------
+  function refresh() { if (route === 'checkin') drawCI(); else if (route === 'members') drawMembers(); else render(); }
+  function render() {
+    $('#view').innerHTML = V[route](); if (after[route]) after[route]();
+    $('#tabs').innerHTML = TABS.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
+  }
+  function go(r) { route = r; location.hash = r; render(); scrollTo(0, 0); }
+  function boot() {
+    $('#gate').innerHTML = '';
+    $('#brand').innerHTML = esc(S.CONFIG.gym).replace(/^(\S+)/, '<span>$1</span>');
+    $('#date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    const h = location.hash.slice(1); if (V[h]) route = h;
+    render();
+  }
   function showGate(message = '') {
     $('#gate').innerHTML = `<div class="gatebox"><h1>Alpha<span>.</span></h1>
       <p class="mut" style="margin-bottom:18px">Management sign in</p>
