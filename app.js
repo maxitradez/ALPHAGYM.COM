@@ -23,13 +23,20 @@
     S.data.memberships = data || [];
   }
   async function loadPaymentsFromDatabase() {
-    const { data, error } = await db.from('payments')
-      .select('id,gym_member_id,membership_id,amount,method,reference,received_at,notes,payment_voids(id,reason,voided_at)')
-      .not('gym_member_id', 'is', null).order('received_at', { ascending: false });
+    let data, error;
+    if (currentRole === 'receptionist') {
+      ({ data, error } = await db.rpc('get_frontdesk_payment_history'));
+    } else {
+      ({ data, error } = await db.from('payments')
+        .select('id,gym_member_id,membership_id,amount,method,reference,received_at,notes,payment_voids(id,reason,voided_at)')
+        .not('gym_member_id', 'is', null).order('received_at', { ascending: false }));
+    }
     if (error) throw error;
     S.data.payments = (data || []).map(p => {
       const membership = (S.data.memberships || []).find(ms => ms.id === p.membership_id);
-      const voidRecord = Array.isArray(p.payment_voids) ? p.payment_voids[0] : p.payment_voids;
+      const voidRecord = currentRole === 'receptionist'
+        ? (p.void_reason ? { reason: p.void_reason, voided_at: p.voided_at } : null)
+        : (Array.isArray(p.payment_voids) ? p.payment_voids[0] : p.payment_voids);
       return {
         id:p.id, memberId:p.gym_member_id, membershipId:p.membership_id,
         planId:membership?.plan_id || null, amount:Number(p.amount),
