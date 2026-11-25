@@ -114,7 +114,7 @@
     console.error('Alpha Gym database error:', error);
     toast(error && error.message ? error.message : 'Database request failed');
   }
-  const TABS = [['home', '01', 'Home'], ['checkin', '02', 'Check-in'], ['classes', '03', 'Classes'], ['members', '04', 'Members'], ['plans', '05', 'Plans'], ['payments', '06', 'Payments'], ['reports', '07', 'Reports'], ['reminders', '08', 'Reminders'], ['staff', '09', 'Staff'], ['profile', '10', 'Profile']];
+  const TABS = [['home', '⌂', 'Home'], ['checkin', '✓', 'Check-in'], ['classes', '▦', 'Classes'], ['members', '♙', 'Members'], ['plans', '◇', 'Plans'], ['payments', 'KSh', 'Payments'], ['reports', '▤', 'Reports'], ['reminders', '◷', 'Reminders'], ['staff', '♧', 'Staff'], ['profile', '●', 'Profile']];
 
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -1036,9 +1036,47 @@
     if (currentRole === 'trainer' && !['home','classes','members','profile'].includes(route)) route = 'home';
     $('#view').innerHTML = V[route](); if (after[route]) after[route]();
     const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','classes','members','profile'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
-    $('#tabs').innerHTML = visibleTabs.map(([r, i, l]) => `<button class="${r === route ? 'on' : ''}" onclick="go('${r}')"><i>${i}</i>${l}</button>`).join('');
+    const activeTab = visibleTabs.find(([r]) => r === route) || visibleTabs[0];
+    const nav = $('#tabs');
+    nav.classList.remove('open');
+    nav.innerHTML = `
+      <button class="menu-trigger" type="button" onclick="toggleNavMenu()" aria-expanded="false" aria-controls="nav-panel" aria-label="Open navigation menu">
+        <span class="menu-trigger-icon" aria-hidden="true">☰</span>
+        <span class="menu-trigger-copy"><b>Menu</b><small>Go to a section</small></span>
+        <span class="menu-current">${esc(activeTab?.[2] || 'Home')}</span>
+        <span class="menu-chevron" aria-hidden="true">⌃</span>
+      </button>
+      <div class="menu-backdrop" onclick="closeNavMenu()" aria-hidden="true"></div>
+      <div class="menu-panel" id="nav-panel" role="group" aria-label="Main navigation">
+        <div class="menu-head">
+          <div><b>Navigation</b><small>Choose a section</small></div>
+          <button type="button" class="menu-close" onclick="closeNavMenu()" aria-label="Close navigation menu">×</button>
+        </div>
+        <div class="menu-grid">${visibleTabs.map(([r, icon, label]) => `
+          <button type="button" class="menu-item ${r === route ? 'on' : ''}" onclick="go('${r}')" ${r === route ? 'aria-current="page"' : ''}>
+            <span class="menu-item-icon" aria-hidden="true">${icon}</span>
+            <span class="menu-item-label">${label}</span>
+            <span class="menu-item-arrow" aria-hidden="true">›</span>
+          </button>`).join('')}
+        </div>
+      </div>`;
   }
-  function go(r) { if (currentRole === 'trainer' && !['home','classes','members','profile'].includes(r)) r = 'home'; route = r; location.hash = r; render(); scrollTo(0, 0); }
+  function toggleNavMenu() {
+    const nav = $('#tabs');
+    if (!nav) return;
+    const opening = !nav.classList.contains('open');
+    nav.classList.toggle('open', opening);
+    const trigger = nav.querySelector('.menu-trigger');
+    if (trigger) trigger.setAttribute('aria-expanded', String(opening));
+  }
+  function closeNavMenu() {
+    const nav = $('#tabs');
+    if (!nav) return;
+    nav.classList.remove('open');
+    const trigger = nav.querySelector('.menu-trigger');
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+  }
+  function go(r) { closeNavMenu(); if (currentRole === 'trainer' && !['home','classes','members','profile'].includes(r)) r = 'home'; route = r; location.hash = r; render(); scrollTo(0, 0); }
   async function boot() {
     $('#gate').innerHTML = '';
     $('#view').innerHTML = '<div class="empty">Loading Alpha Gym records…</div>';
@@ -1122,7 +1160,8 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile, changeClassDate, openClassForm, saveGroupClass, toggleGroupClass, openClassAttendance, saveClassAttendance, openSuspendMember, saveMemberSuspension, reactivateMember, confirmReactivateMember, confirmArchiveMember, toggleArchivedMembers, restoreMember, confirmRestoreMember });
+  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, toggleNavMenu, closeNavMenu, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile, changeClassDate, openClassForm, saveGroupClass, toggleGroupClass, openClassAttendance, saveClassAttendance, openSuspendMember, saveMemberSuspension, reactivateMember, confirmReactivateMember, confirmArchiveMember, toggleArchivedMembers, restoreMember, confirmRestoreMember });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeNavMenu(); });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
