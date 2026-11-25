@@ -1,6 +1,6 @@
 (function () {
   const S = Store, $ = s => document.querySelector(s), esc = S.esc;
-  let route = 'home', filter = 'all', currentUser = null, currentProfile = null, currentRole = null;
+  let route = 'home', filter = 'all', showArchivedMembers = false, archivedMembers = [], currentUser = null, currentProfile = null, currentRole = null;
   let reportFrom = S.today().slice(0, 7) + '-01', reportTo = S.today();
   const db = window.alphaSupabase;
 
@@ -79,6 +79,13 @@
   }
 
   async function loadMembersFromDatabase() {
+  async function loadArchivedMembersFromDatabase() {
+    if (!['owner','manager'].includes(currentRole)) { archivedMembers = []; return; }
+    const result = await db.from('gym_members').select('id,member_number,full_name,phone,email,joined_on,record_status,created_at').eq('record_status','archived').order('created_at',{ascending:false});
+    if (result.error) throw result.error;
+    archivedMembers = (result.data || []).map(m => ({id:m.id,memberNumber:m.member_number,name:m.full_name,phone:m.phone,email:m.email || '',joined:m.joined_on,recordStatus:m.record_status}));
+  }
+
     const fields = currentRole === 'trainer'
       ? 'id,member_number,full_name,phone,email,joined_on,record_status,created_at'
       : 'id,member_number,full_name,phone,email,joined_on,record_status,created_at,is_suspended,suspension_reason,suspended_at,suspension_pause_membership';
@@ -481,10 +488,18 @@
 
   V.members = () => currentRole === 'trainer' ? `<h2>Member directory <span class="pill">${S.data.members.length}</span></h2><p class="mut">View member contact details. Editing, membership and payment records are restricted.</p><input id="q" placeholder="Search by name or phone…" oninput="drawMembers()" autocomplete="off"><div id="res"></div>` : `<h2>Members <span class="pill">${S.data.members.length}</span></h2>
     <input id="q" placeholder="Search members…" oninput="drawMembers()" autocomplete="off">
-    <div class="chips" id="chips"></div><div id="res"></div>
+    <div id="archive-actions"></div><div class="chips" id="chips"></div><div id="res"></div>
     <button class="fab" onclick="openAdd()">+</button>`;
-  after.members = () => drawMembers();
+  after.members = () => { drawMembers(); const host = $('#archive-actions'); if (host && ['owner','manager'].includes(currentRole)) host.innerHTML = '<button class="btn block ghost" style="margin:8px 0" onclick="toggleArchivedMembers()">' + (showArchivedMembers ? 'Back to active members' : 'View archived members (' + archivedMembers.length + ')') + '</button>'; };
   function drawMembers() {
+    if (showArchivedMembers && ['owner','manager'].includes(currentRole)) {
+      const query = ($('#q') || {}).value ? $('#q').value.toLowerCase().trim() : '';
+      const list = archivedMembers.filter(m => !query || m.name.toLowerCase().includes(query) || (m.phone || '').toLowerCase().includes(query));
+      $('#chips').innerHTML = '<p class="mut">Archived members · records are retained</p>';
+      $('#res').innerHTML = list.length ? list.map(m => '<div class="row card" style="margin:8px 0;padding:12px"><div class="grow"><b>' + esc(m.name) + '</b><small>' + esc(m.phone || 'No phone') + ' · Archived</small></div><button class="btn sm" onclick="restoreMember(\'' + m.id + '\')">Restore</button></div>').join('') : '<div class="empty">No archived members found.</div>';
+      return;
+    }
+
     const q = ($('#q') || {}).value ? $('#q').value.toLowerCase().trim() : '';
     if (currentRole === 'trainer') {
       const list = S.data.members.filter(m => !q || m.name.toLowerCase().includes(q) || (m.phone || '').toLowerCase().includes(q)).sort((a,b) => a.name.localeCompare(b.name));
@@ -499,6 +514,26 @@
     $('#res').innerHTML = list.length ? list.map(x => row(x.m)).join('') : '<div class="empty">No members found.</div>';
   }
   function setFilter(f) { filter = f; drawMembers(); }
+  async function toggleArchivedMembers() {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can view archived members'); return; }
+    showArchivedMembers = !showArchivedMembers;
+    if (showArchivedMembers) { try { await loadArchivedMembersFromDatabase(); } catch (error) { showArchivedMembers = false; databaseError(error); return; } }
+    render();
+  }
+  function restoreMember(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can restore members'); return; }
+    const m = archivedMembers.find(x => x.id === id); if (!m) return;
+    modal('<h3>Restore member?</h3><p>Restore <b>' + esc(m.name) + '</b> to the active member list?</p><p class="mut">Their existing membership, payment and attendance history will remain attached to their record. Restoring does not automatically renew an expired membership.</p><button class="btn block" onclick="confirmRestoreMember(\'' + id + '\')">Restore member</button><button class="btn block ghost" onclick="toggleArchivedMembers()">Cancel</button>');
+  }
+  async function confirmRestoreMember(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can restore members'); return; }
+    const m = archivedMembers.find(x => x.id === id); if (!m) { closeModal(); return; }
+    const result = await db.from('gym_members').update({record_status:'active',updated_by:currentUser.id}).eq('id',id).eq('record_status','archived');
+    if (result.error) { databaseError(result.error); return; }
+    await Promise.all([loadMembersFromDatabase(),loadArchivedMembersFromDatabase()]);
+    closeModal(); showArchivedMembers = false; toast('Member restored'); render();
+  }
+
 
   V.plans = () => currentRole === 'trainer' ? '<h2>Access restricted</h2><div class="empty">Membership plan management is not available to trainer accounts.</div>' : `<h2>Membership plans <span class="pill">${S.data.plans.length}</span></h2>
     <p class="mut">Configure the packages Alpha Gym offers. Prices and durations are controlled by management.</p>
@@ -1066,7 +1101,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile, changeClassDate, openClassForm, saveGroupClass, toggleGroupClass, openClassAttendance, saveClassAttendance, openSuspendMember, saveMemberSuspension, reactivateMember, confirmReactivateMember, confirmArchiveMember });
+  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile, changeClassDate, openClassForm, saveGroupClass, toggleGroupClass, openClassAttendance, saveClassAttendance, openSuspendMember, saveMemberSuspension, reactivateMember, confirmReactivateMember, confirmArchiveMember, toggleArchivedMembers, restoreMember, confirmRestoreMember });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
