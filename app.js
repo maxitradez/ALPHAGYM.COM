@@ -769,7 +769,8 @@
     modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>${esc(m.phone)}${m.email?' · '+esc(m.email):''}</small></div>${badge(s)}</div>
       <div class="prev" style="margin-top:14px">${s.key==='none'?'No membership yet.':`Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
       <div class="acts"><button class="btn" onclick="editMember('${id}')">Edit member</button><button class="btn" onclick="openAssign('${id}')">Assign plan</button>
-      ${inn?`<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>`:`<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
+      ${inn?`<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>`:m.isSuspended?'<button class="btn" disabled>Suspended — check-in blocked</button>':`<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
+      ${['owner','manager'].includes(currentRole) ? (m.isSuspended ? `<button class="btn" onclick="reactivateMember('${id}')">Reactivate member</button>` : `<button class="btn red" onclick="openSuspendMember('${id}')">Suspend member</button>`) : ''}
       <a class="btn wa" target="_blank" rel="noopener" href="${S.waLink(m.phone,S.reminderMsg(m))}">WhatsApp</a>
       ${m.email?`<a class="btn ghost" href="${S.mailLink(m)}">Email</a>`:`<button class="btn ghost" onclick="toast('No email on file')">Email</button>`}</div>
       <h3>Memberships & balances</h3>${membershipHtml}
@@ -777,6 +778,36 @@
       <h3>Recent visits</h3>${vis.length?vis.slice(0,5).map(v=>`<div class="row"><div class="grow"><b>${S.fmtDate(S.ymd(v.in))}</b><small>${S.fmtTime(v.in)} → ${v.out?S.fmtTime(v.out):'inside'}${v.notes ? ' · '+esc(v.notes) : ''}</small></div></div>`).join(''):'<div class="empty">No visits yet.</div>'}
       <button class="btn block ghost" style="color:var(--red)" onclick="delMember('${id}')">Archive member</button>`);
   }
+  function openSuspendMember(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can suspend members'); return; }
+    const m = S.member(id); if (!m || m.isSuspended) return;
+    const hasCurrentMembership = memberMemberships(id).some(ms => ms.status === 'active' && ms.start_date <= S.today() && ms.end_date >= S.today());
+    modal(`<h3>Suspend member · ${esc(m.name)}</h3>
+      <p class="mut">Suspension blocks gym check-in and group-class attendance. Records and payment history are retained.</p>
+      <label>Reason for suspension</label><textarea id="suspend-reason" rows="3" maxlength="500" placeholder="Enter the reason (at least 5 characters)"></textarea>
+      <label>Membership during suspension</label>
+      <select id="suspend-mode"><option value="continue">Continue counting down — keep original expiry date</option>${hasCurrentMembership ? '<option value="pause">Pause membership — restore unused days on reactivation</option>' : ''}</select>
+      <button class="btn block red" onclick="saveMemberSuspension('${id}')">Confirm suspension</button>
+      <button class="btn block ghost" onclick="openMember('${id}')">Cancel</button>`);
+  }
+  async function saveMemberSuspension(id) {
+    const reason = ($('#suspend-reason') || {}).value?.trim() || '';
+    if (reason.length < 5) { toast('Enter a suspension reason (at least 5 characters)'); return; }
+    const pause = ($('#suspend-mode') || {}).value === 'pause';
+    const { error } = await db.rpc('suspend_gym_member', { _member_id: id, _reason: reason, _pause_membership: pause });
+    if (error) { databaseError(error); return; }
+    await loadMembersFromDatabase(); await loadMembershipsFromDatabase();
+    closeModal(); toast('Member suspended'); openMember(id); refresh();
+  }
+  async function reactivateMember(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can reactivate members'); return; }
+    if (!confirm('Reactivate this member and restore gym access?')) return;
+    const { error } = await db.rpc('reactivate_gym_member', { _member_id: id });
+    if (error) { databaseError(error); return; }
+    await loadMembersFromDatabase(); await loadMembershipsFromDatabase();
+    closeModal(); toast('Member reactivated'); openMember(id); refresh();
+  }
+
   async function delMember(id) {
     if (!confirm('Archive this member? Their history will be retained.')) return;
     const { error } = await db.from('gym_members')
