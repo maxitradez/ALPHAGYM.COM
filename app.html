@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body class="app">
 <div id="gate"></div>
@@ -19,7 +19,7 @@
   <button class="btn ghost sm" onclick="openSettings()">Settings</button>
 </header>
 <main id="view"></main>
-<nav class="tabs" id="tabs"></nav>
+<nav class="mobile-menu" id="tabs" aria-label="Main navigation"></nav>
 <div id="modal" onclick="if(event.target===this)closeModal()"></div>
 <div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -30,6 +30,6 @@ window.alphaSupabase = window.supabase.createClient(
 );
 </script>
 <script src="store.js?v=19"></script>
-<script src="app.js?v=37"></script>
+<script src="app.js?v=38"></script>
 </body>
 </html>
