@@ -767,7 +767,7 @@
       </div>`;
     }).join('') : '<div class="empty">No membership assigned yet.</div>';
     modal(`<div style="display:flex;gap:12px;align-items:center"><div class="av" style="width:54px;height:54px">${ini(m.name)}</div><div class="grow"><h3 style="margin:0">${esc(m.name)}</h3><small>${esc(m.phone)}${m.email?' · '+esc(m.email):''}</small></div>${badge(s)}</div>
-      <div class="prev" style="margin-top:14px">${s.key==='none'?'No membership yet.':`Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
+      <div class="prev" style="margin-top:14px">${m.isSuspended ? '<b>Suspended</b><br>Reason: '+esc(m.suspensionReason || 'Not provided')+'<br>' : s.key==='none'?'No membership yet.':`Valid until <b>${S.fmtDate(s.end)}</b> · ${esc(sub(s))}`}<br><small>Member since ${S.fmtDate(m.joined)} · ${vis.length} visits logged</small></div>
       <div class="acts"><button class="btn" onclick="editMember('${id}')">Edit member</button><button class="btn" onclick="openAssign('${id}')">Assign plan</button>
       ${inn?`<button class="btn red" onclick="doOut('${open.id}');closeModal()">Check out</button>`:m.isSuspended?'<button class="btn" disabled>Suspended — check-in blocked</button>':`<button class="btn ghost" onclick="closeModal();doIn('${id}')">Check in</button>`}
       ${['owner','manager'].includes(currentRole) ? (m.isSuspended ? `<button class="btn" onclick="reactivateMember('${id}')">Reactivate member</button>` : `<button class="btn red" onclick="openSuspendMember('${id}')">Suspend member</button>`) : ''}
