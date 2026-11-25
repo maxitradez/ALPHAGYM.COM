@@ -803,9 +803,19 @@
     await loadMembersFromDatabase(); await loadMembershipsFromDatabase();
     closeModal(); toast('Member suspended'); openMember(id); refresh();
   }
-  async function reactivateMember(id) {
+  function reactivateMember(id) {
     if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can reactivate members'); return; }
-    if (!confirm('Reactivate this member and restore gym access?')) return;
+    const m = S.member(id);
+    if (!m || !m.isSuspended) { toast('This member is not currently suspended'); return; }
+    modal(`<div class="dash-head"><div><h3 style="margin:0">Reactivate member?</h3><p>Restore gym access for ${esc(m.name)}.</p></div><span class="badge b-active">Reactivation</span></div>
+      <div class="prev"><b>What happens next?</b><br>This member will no longer be marked as suspended. Their membership will follow the suspension option selected earlier, and their gym access will be restored.</div>
+      <button class="btn block" onclick="confirmReactivateMember('${id}')">Reactivate member</button>
+      <button class="btn block ghost" onclick="openMember('${id}')">Cancel</button>`);
+  }
+  async function confirmReactivateMember(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can reactivate members'); return; }
+    const m = S.member(id);
+    if (!m || !m.isSuspended) { toast('This member is not currently suspended'); return; }
     const { error } = await db.rpc('reactivate_gym_member', { _member_id: id });
     if (error) { databaseError(error); return; }
     await loadMembersFromDatabase(); await loadMembershipsFromDatabase();
