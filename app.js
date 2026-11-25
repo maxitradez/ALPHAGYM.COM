@@ -822,8 +822,23 @@
     closeModal(); toast('Member reactivated'); openMember(id); refresh();
   }
 
-  async function delMember(id) {
-    if (!confirm('Archive this member? Their history will be retained.')) return;
+  function delMember(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can archive members'); return; }
+    const m = S.member(id);
+    if (!m || m.recordStatus === 'archived') return;
+    if (S.isInside(id)) { toast('Check the member out before archiving them'); return; }
+    modal(`<h3>Archive member?</h3>
+      <p>Archive <b>${esc(m.name)}</b> from the active member list?</p>
+      <p class="mut">Their membership, payment, and attendance history will be retained. They will no longer be available for normal gym check-in or class attendance.</p>
+      <button class="btn block red" onclick="confirmArchiveMember('${id}')">Archive member</button>
+      <button class="btn block ghost" onclick="openMember('${id}')">Cancel</button>`);
+  }
+
+  async function confirmArchiveMember(id) {
+    if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can archive members'); return; }
+    const m = S.member(id);
+    if (!m || m.recordStatus === 'archived') { closeModal(); return; }
+    if (S.isInside(id)) { toast('Check the member out before archiving them'); return; }
     const { error } = await db.from('gym_members')
       .update({ record_status: 'archived', updated_by: currentUser.id })
       .eq('id', id);
@@ -1051,7 +1066,7 @@
     showGate();
   }
 
-  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile, changeClassDate, openClassForm, saveGroupClass, toggleGroupClass, openClassAttendance, saveClassAttendance, openSuspendMember, saveMemberSuspension, reactivateMember, confirmReactivateMember });
+  Object.assign(window, { $, toast, closeModal, drawReports, exportReport, drawCI, drawMembers, drawPlans, openPlanForm, savePlan, togglePlan, openAssign, saveAssignment, doIn, doOut, forceIn, setFilter, openMember, delMember, editMember, saveEditMember, openAdd, saveMember, openPay, savePay, openVoidPayment, saveVoidPayment, openSettings, exportMembers, exportPay, logRem, queueAll, go, unlock, forgotPassword, lockApp, render, openStaffInvite, inviteStaff, editStaffRole, saveStaffRole, toggleStaff, openProfileEdit, saveProfile, changeClassDate, openClassForm, saveGroupClass, toggleGroupClass, openClassAttendance, saveClassAttendance, openSuspendMember, saveMemberSuspension, reactivateMember, confirmReactivateMember, confirmArchiveMember });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   gate().catch(error => {
     console.error('Alpha Gym authentication startup failed:', error);
