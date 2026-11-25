@@ -79,8 +79,11 @@
   }
 
   async function loadMembersFromDatabase() {
+    const fields = currentRole === 'trainer'
+      ? 'id,member_number,full_name,phone,email,joined_on,record_status,created_at'
+      : 'id,member_number,full_name,phone,email,joined_on,record_status,created_at,is_suspended,suspension_reason,suspended_at,suspension_pause_membership';
     const { data, error } = await db.from('gym_members')
-      .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at,is_suspended,suspension_reason,suspended_at,suspension_pause_membership')
+      .select(fields)
       .eq('record_status', 'active')
       .order('created_at', { ascending: false });
     if (error) throw error;
