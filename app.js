@@ -600,7 +600,7 @@
   let staffRecords = [];
   V.staff = () => `<h2>Staff management</h2>
     <p class="mut" style="margin:-6px 0 14px">Invite team members and control their access to Alpha Gym.</p>
-    <div class="sum"><div><b>${staffRecords.length}</b><small>Accounts</small></div><div><b>${staffRecords.filter(x=>x.is_active).length}</b><small>Active</small></div><div><b>${staffRecords.filter(x=>x.role==='trainer').length}</b><small>Trainers</small></div></div>
+    <div class="sum" id="staff-summary"><div><b>—</b><small>Accounts</small></div><div><b>—</b><small>Active</small></div><div><b>—</b><small>Trainers</small></div></div>
     <button class="btn block" onclick="openStaffInvite()">Invite staff member</button>
     <div id="staff-list"><div class="empty">Loading staff accounts…</div></div>`;
   after.staff = () => loadStaff();
@@ -617,6 +617,8 @@
     try {
       const result=await staffAction({action:'list'});
       staffRecords=result.staff||[];
+      const summary=$('#staff-summary');
+      if(summary) summary.innerHTML=`<div><b>${staffRecords.length}</b><small>Accounts</small></div><div><b>${staffRecords.filter(x=>x.is_active).length}</b><small>Active</small></div><div><b>${staffRecords.filter(x=>x.role==='trainer').length}</b><small>Trainers</small></div>`;
       host.innerHTML=staffRecords.length ? staffRecords.map(s=>`<div class="row">
         <div class="av">${ini(s.full_name||s.email||'S')}</div>
         <div class="grow"><b>${esc(s.full_name||'Staff member')}</b><small>${esc(s.email||'No email')} · ${esc(s.phone||'No phone')}</small><small>${esc(s.role)} · ${s.is_active?'Active':'Inactive'}</small></div>
@@ -657,12 +659,24 @@
     try { await staffAction({action:'update',id,role:$('#staff-role-edit').value});closeModal();toast('Staff role updated');await loadStaff(); }
     catch(error){toast(error.message||'Could not update role');}
   }
-  async function toggleStaff(id) {
+  function toggleStaff(id) {
     if(currentRole!=='owner')return;
     const person=staffRecords.find(s=>s.id===id);if(!person||person.role==='owner'||id===currentUser.id)return;
-    if(!confirm((person.is_active?'Disable':'Enable')+' access for '+(person.full_name||person.email)+'?'))return;
-    try { await staffAction({action:person.is_active?'disable':'enable',id});toast(person.is_active?'Staff access disabled':'Staff access enabled');await loadStaff(); }
-    catch(error){toast(error.message||'Could not update staff access');}
+    const disabling=!!person.is_active;
+    modal(`<h3>${disabling?'Disable staff access?':'Enable staff access?'}</h3>
+      <p class="mut">${esc(person.full_name||person.email)} · ${esc(person.role)}</p>
+      <p>${disabling?'This staff member will no longer be able to sign in to Alpha Gym. Their records and history will be kept.':'This staff member will regain access to Alpha Gym using their existing account.'}</p>
+      <button class="btn block ${disabling?'red':''}" onclick="confirmStaffToggle('${id}')">${disabling?'Disable access':'Enable access'}</button>
+      <button class="btn block ghost" onclick="closeModal()">Cancel</button>`);
+  }
+  async function confirmStaffToggle(id) {
+    if(currentRole!=='owner')return;
+    const person=staffRecords.find(s=>s.id===id);if(!person||person.role==='owner'||id===currentUser.id)return;
+    const disabling=!!person.is_active;
+    try {
+      await staffAction({action:disabling?'disable':'enable',id});
+      closeModal();toast(disabling?'Staff access disabled':'Staff access enabled');await loadStaff();
+    } catch(error){toast(error.message||'Could not update staff access');}
   }
 
   V.payments = () => {
