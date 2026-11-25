@@ -1,4 +1,4 @@
-const CACHE = 'alpha-gym-v31';
+const CACHE = 'alpha-gym-v32';
 const FILES = ['./', 'index.html', 'app.html', 'portal.html', 'reset-password.html', 'style.css', 'store.js', 'app.js', 'icon.svg', 'manifest.json'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))).then(() => self.clients.claim())); });
