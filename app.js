@@ -362,7 +362,8 @@
       ms.end_date >= classDate &&
       (S.data.plans || []).some(p => p.id === ms.plan_id && p.includesGroupClasses)
     );
-    if (!eligibleMembership) {
+    // Trainers cannot read membership or plan records by design; the database trigger validates their submissions securely.
+    if (currentRole !== 'trainer' && !eligibleMembership) {
       toast('Member needs an active membership that includes group classes on this date');
       return;
     }
