@@ -523,7 +523,7 @@
   function restoreMember(id) {
     if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can restore members'); return; }
     const m = archivedMembers.find(x => x.id === id); if (!m) return;
-    modal('<h3>Restore member?</h3><p>Restore <b>' + esc(m.name) + '</b> to the active member list?</p><p class="mut">Their existing membership, payment and attendance history will remain attached to their record. Restoring does not automatically renew an expired membership.</p><button class="btn block" onclick="confirmRestoreMember(\'' + id + '\')">Restore member</button><button class="btn block ghost" onclick="toggleArchivedMembers()">Cancel</button>');
+    modal('<h3>Restore member?</h3><p>Restore <b>' + esc(m.name) + '</b> to the active member list?</p><p class="mut">Their existing membership, payment and attendance history will remain attached to their record. Restoring does not automatically renew an expired membership.</p><button class="btn block" onclick="confirmRestoreMember(\'' + id + '\')">Restore member</button><button class="btn block ghost" onclick="closeModal();toggleArchivedMembers()">Cancel</button>');
   }
   async function confirmRestoreMember(id) {
     if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can restore members'); return; }
