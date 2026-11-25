@@ -80,14 +80,16 @@
 
   async function loadMembersFromDatabase() {
     const { data, error } = await db.from('gym_members')
-      .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at')
+      .select('id,member_number,full_name,phone,email,joined_on,record_status,created_at,is_suspended,suspension_reason,suspended_at,suspension_pause_membership')
       .eq('record_status', 'active')
       .order('created_at', { ascending: false });
     if (error) throw error;
     S.data.members = (data || []).map(m => ({
       id: m.id, memberNumber: m.member_number, name: m.full_name,
       phone: m.phone, email: m.email || '', joined: m.joined_on,
-      recordStatus: m.record_status
+      recordStatus: m.record_status, isSuspended: !!m.is_suspended,
+      suspensionReason: m.suspension_reason || '', suspendedAt: m.suspended_at || null,
+      suspensionPauseMembership: !!m.suspension_pause_membership
     }));
   }
 
@@ -100,11 +102,12 @@
   // ---------- helpers ----------
   const ini = n => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const badge = s => `<span class="badge b-${s.key}">${s.label}</span>`;
-  const sub = s => s.key === 'none' ? 'No membership' : s.left < 0 ? `Expired ${-s.left}d ago` : s.left === 0 ? 'Ends today' : `${s.left}d left`;
+  const sub = s => s.key === 'suspended' ? 'Suspended' : s.key === 'none' ? 'No membership' : s.left < 0 ? `Expired ${-s.left}d ago` : s.left === 0 ? 'Ends today' : `${s.left}d left`;
   function memberMemberships(id) { return (S.data.memberships || []).filter(x => x.gym_member_id === id).sort((a,b) => b.start_date.localeCompare(a.start_date)); }
   function membershipPaid(id) { return S.data.payments.filter(p => p.membershipId === id && !p.isVoided).reduce((n,p) => n + Number(p.amount || 0), 0); }
   function membershipBalance(ms) { return Math.max(0, Number(ms.price_at_purchase) - Number(ms.discount_amount || 0) - membershipPaid(ms.id)); }
   function memberStatus(m) {
+    if (m.isSuspended) return {key:'suspended',label:'Suspended',left:null,end:null};
     const list = memberMemberships(m.id);
     const current = list.find(x => x.status === 'active' && x.end_date >= S.today()) || list[0];
     if (!current) return {key:'none',label:'No plan',left:null,end:null};
@@ -351,6 +354,7 @@
     if (!memberId) { toast('Select a member'); return; }
     const member = S.member(memberId);
     if (!member) { toast('Member record not found'); return; }
+    if (member.isSuspended) { toast('Suspended members cannot attend group classes'); return; }
     if (currentRole === 'trainer') {
       const c = groupClassRecords.find(x => x.id === classId);
       if (!c || c.instructor_id !== currentUser.id) { toast('You are not assigned to this class'); return; }
@@ -370,7 +374,7 @@
     const { error } = await db.from('group_class_attendance').insert({class_id:classId,gym_member_id:memberId,session_date:classDate,status:'attended',recorded_by:currentUser.id});
     if (error) {
       if (error.code === '23505') toast('This member is already recorded for this class');
-      else if (error.code === '23514') toast('Member needs an active membership that includes group classes on this date');
+      else if (error.code === '23514') toast(error.message?.includes('Suspended') ? 'Suspended members cannot attend group classes' : 'Member needs an active membership that includes group classes on this date');
       else databaseError(error);
       return;
     }
@@ -389,6 +393,8 @@
       if (inn) {
         const openVisit = S.data.checkins.find(c => c.memberId === m.id && !c.out);
         action = `<button class="btn sm red" onclick="event.stopPropagation();doOut('${openVisit.id}')">Check out</button>`;
+      } else if (status.key === 'suspended') {
+        action = '<button class="btn sm" disabled>Suspended</button>';
       } else if (['active','expiring'].includes(status.key)) {
         action = `<button class="btn sm" onclick="event.stopPropagation();doIn('${m.id}')">Check in</button>`;
       } else if (['expired','none'].includes(status.key) && currentRole === 'owner') {
@@ -435,6 +441,7 @@
     const m = S.member(id);
     if (!m) { toast('Member not found'); return; }
     const s = memberStatus(m);
+    if (m.isSuspended) { toast('This member is suspended. Reactivate them before check-in.'); return; }
     if (S.isInside(id)) { toast('Already inside'); return; }
     if (s.key === 'expired' || s.key === 'none') {
       const canOverride = currentRole === 'owner';
@@ -483,7 +490,7 @@
     }
     const all = S.data.members.map(m => ({ m, s: memberStatus(m) }));
     const cnt = key => all.filter(x => key === 'all' || x.s.key === key).length;
-    $('#chips').innerHTML = [['all', 'All'], ['active', 'Active'], ['expiring', 'Expiring'], ['expired', 'Expired'], ['none', 'No plan']].map(([key, l]) => `<button class="chip ${filter === key ? 'on' : ''}" onclick="setFilter('${key}')">${l} ${cnt(key)}</button>`).join('');
+    $('#chips').innerHTML = [['all', 'All'], ['active', 'Active'], ['expiring', 'Expiring'], ['expired', 'Expired'], ['suspended', 'Suspended'], ['none', 'No plan']].map(([key, l]) => `<button class="chip ${filter === key ? 'on' : ''}" onclick="setFilter('${key}')">${l} ${cnt(key)}</button>`).join('');
     const list = all.filter(x => (filter === 'all' || x.s.key === filter) && (!q || x.m.name.toLowerCase().includes(q) || x.m.phone.includes(q)))
       .sort((a, b) => (a.s.left == null ? 1e9 : a.s.left) - (b.s.left == null ? 1e9 : b.s.left));
     $('#res').innerHTML = list.length ? list.map(x => row(x.m)).join('') : '<div class="empty">No members found.</div>';
@@ -824,7 +831,8 @@
     S.data.members.unshift({
       id: data.id, memberNumber: data.member_number, name: data.full_name,
       phone: data.phone, email: data.email || '', joined: data.joined_on,
-      recordStatus: data.record_status
+      recordStatus: data.record_status, isSuspended: false, suspensionReason: '',
+      suspendedAt: null, suspensionPauseMembership: false
     });
     closeModal(); toast('Member saved to Alpha Gym database'); refresh();
   }
