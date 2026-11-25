@@ -781,6 +781,7 @@
   function openSuspendMember(id) {
     if (!['owner','manager'].includes(currentRole)) { toast('Only the owner or manager can suspend members'); return; }
     const m = S.member(id); if (!m || m.isSuspended) return;
+    if (S.isInside(id)) { toast('Check the member out before suspending them'); return; }
     const hasCurrentMembership = memberMemberships(id).some(ms => ms.status === 'active' && ms.start_date <= S.today() && ms.end_date >= S.today());
     modal(`<h3>Suspend member · ${esc(m.name)}</h3>
       <p class="mut">Suspension blocks gym check-in and group-class attendance. Records and payment history are retained.</p>
