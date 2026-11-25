@@ -78,7 +78,6 @@
     classAttendanceRecords = data || [];
   }
 
-  async function loadMembersFromDatabase() {
   async function loadArchivedMembersFromDatabase() {
     if (!['owner','manager'].includes(currentRole)) { archivedMembers = []; return; }
     const result = await db.from('gym_members').select('id,member_number,full_name,phone,email,joined_on,record_status,created_at').eq('record_status','archived').order('created_at',{ascending:false});
@@ -86,6 +85,7 @@
     archivedMembers = (result.data || []).map(m => ({id:m.id,memberNumber:m.member_number,name:m.full_name,phone:m.phone,email:m.email || '',joined:m.joined_on,recordStatus:m.record_status}));
   }
 
+  async function loadMembersFromDatabase() {
     const fields = currentRole === 'trainer'
       ? 'id,member_number,full_name,phone,email,joined_on,record_status,created_at'
       : 'id,member_number,full_name,phone,email,joined_on,record_status,created_at,is_suspended,suspension_reason,suspended_at,suspension_pause_membership';
