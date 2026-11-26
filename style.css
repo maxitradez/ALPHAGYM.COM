@@ -453,3 +453,53 @@ h3.dash-label { margin-top: 24px; }
 @media (prefers-reduced-motion: reduce) {
   .menu-panel, .menu-backdrop, .menu-chevron { transition: none; }
 }
+
+
+/* ---------- Alpha Gym: readability and phone layout refinement ---------- */
+body.app { font-size: 16px; }
+#view {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 22px 38px;
+}
+#view h2 { font-size: 1.65rem; letter-spacing: -.35px; margin-bottom: 16px; }
+#view h3 { font-size: 1.12rem; margin-top: 24px; margin-bottom: 12px; }
+#view p, #view li { line-height: 1.55; }
+#view label { font-size: .9rem; margin-bottom: 6px; }
+#view small, #view .mut { font-size: .86rem; }
+#view .card { padding: 20px; }
+#view .row { padding: 15px; gap: 12px; }
+#view .row b { font-size: 1rem; }
+#view .row small { font-size: .84rem; line-height: 1.45; }
+#view .badge { font-size: .76rem; padding: 4px 10px; }
+#view .btn { min-height: 46px; padding: 12px 16px; font-size: .92rem; }
+#view .btn.sm { min-height: 42px; padding: 9px 13px; font-size: .86rem; }
+#view table { width: 100%; border-collapse: collapse; }
+#view th, #view td { padding: 12px 10px; font-size: .88rem; line-height: 1.4; }
+#view input, #view select, #view textarea { font-size: 16px; }
+#view .empty { font-size: .96rem; line-height: 1.55; padding: 30px 14px; }
+.sheet label { font-size: .9rem; margin-bottom: 6px; }
+.sheet small { font-size: .84rem; }
+
+@media (max-width: 600px) {
+  #view { max-width: none; padding: 20px 16px 34px; }
+  #view h2 { font-size: 1.58rem; margin-bottom: 15px; }
+  #view h3 { font-size: 1.08rem; }
+  #view .card { padding: 17px; }
+  #view .row { align-items: flex-start; padding: 13px; gap: 10px; }
+  #view .row > .grow { flex: 1 1 130px; }
+  #view .row > .btn { min-width: 104px; }
+  #view table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #view th, #view td { padding: 11px 9px; white-space: nowrap; }
+  #view input, #view select, #view textarea { min-height: 50px; }
+  .menu-trigger { min-height: 68px; }
+  .menu-item { min-height: 62px; }
+  .menu-item-label { font-size: .9rem; }
+  .menu-trigger-copy b { font-size: .96rem; }
+  .menu-current { font-size: .9rem; }
+  .sheet { max-height: 88dvh; }
+}
+@media (min-width: 601px) {
+  #view { padding-left: 26px; padding-right: 26px; }
+}
