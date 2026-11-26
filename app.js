@@ -792,20 +792,45 @@
   function exportPay() { if (!['owner','manager'].includes(currentRole)) { toast('Payment exports are available to the owner and manager only'); return; } download('payments.csv', [['Date','Member','Phone','Plan','Amount','Method','Reference','Notes'], ...S.data.payments.map(p=>{const m=S.member(p.memberId)||{};return [p.paid,m.name,m.phone,S.plan(p.planId)?.name||'',p.amount,p.method,p.code,p.notes];})]); }
 
   V.reminders = () => {
-    const list = S.data.members.map(m => ({ m, s: memberStatus(m) })).filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14)).sort((a, b) => a.s.left - b.s.left);
+    if (currentRole === 'trainer') return '<h2>Access restricted</h2><div class="empty">Membership reminders are not available to trainer accounts.</div>';
+    const expiryList = S.data.members.map(m => ({ m, s: memberStatus(m) }))
+      .filter(x => x.s.key === 'expiring' || (x.s.key === 'expired' && x.s.left >= -14))
+      .sort((a, b) => a.s.left - b.s.left);
+    const balanceList = (S.data.memberships || [])
+      .filter(ms => ms.status !== 'cancelled' && membershipBalance(ms) > 0)
+      .map(ms => ({ ms, m: S.member(ms.gym_member_id), due: membershipBalance(ms) }))
+      .filter(x => x.m && !x.m.isSuspended)
+      .sort((a, b) => b.due - a.due);
+    const expiryHtml = expiryList.length ? expiryList.map(({ m, s }) => {
+      const opened = S.remindedToday(m.id);
+      return `<div class="row card" style="margin:8px 0;padding:12px">
+        <div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b>
+          <small>${esc(sub(s))} · ${badge(s)}${opened ? ' · WhatsApp opened today' : ''}</small>
+          <small>${esc(m.phone || 'No phone recorded')}</small>
+        </div>
+        ${m.phone ? `<a class="btn wa sm" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}" onclick="logRem('${m.id}','whatsapp')">WhatsApp</a>` : '<span class="badge b-none">No phone</span>'}
+      </div>`;
+    }).join('') : '<div class="empty">No memberships are approaching expiry or recently expired.</div>';
+    const balanceHtml = balanceList.length ? balanceList.map(({ m, ms, due }) => {
+      const message = `Hi ${m.name.split(' ')[0]}, this is ${S.CONFIG.gym}. Our records show an outstanding membership balance of ${S.money(due)} for your membership ending ${S.fmtDate(ms.end_date)}. Please contact the front desk to confirm and settle the balance. Thank you.`;
+      return `<div class="row card" style="margin:8px 0;padding:12px">
+        <div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b>
+          <small>${esc(S.plan(ms.plan_id)?.name || 'Membership')} · Ends ${S.fmtDate(ms.end_date)}</small>
+          <small>Outstanding: <b>${S.money(due)}</b> · ${esc(m.phone || 'No phone recorded')}</small>
+        </div>
+        ${m.phone ? `<a class="btn wa sm" target="_blank" rel="noopener" href="${S.waLink(m.phone, message)}" onclick="logRem('${m.id}','whatsapp')">WhatsApp</a>` : '<span class="badge b-none">No phone</span>'}
+      </div>`;
+    }).join('') : '<div class="empty">No outstanding membership balances.</div>';
     return `<h2>Reminders</h2>
-    <div class="autocard">Review memberships that are approaching expiry or have expired. Contact members using the available contact details.</div>
-    ${list.length ? list.map(({ m, s }) => {
-      const done = S.remindedToday(m.id);
-      return `<div class="row"><div class="av">${ini(m.name)}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(sub(s))} · ${badge(s)} ${done ? '· sent today' : ''}</small></div>
-      <a class="btn wa sm" target="_blank" rel="noopener" href="${S.waLink(m.phone, S.reminderMsg(m))}" onclick="logRem('${m.id}','whatsapp')">WhatsApp</a></div>`;
-    }).join('') : '<div class="empty">No reminders are currently required.</div>'}`;
+      <div class="autocard">Review upcoming membership expiries, recently expired memberships and unpaid balances. Contact members using their recorded phone numbers.</div>
+      <h3>Membership expiry <span class="pill">${expiryList.length}</span></h3>
+      ${expiryHtml}
+      <h3>Outstanding balances <span class="pill">${balanceList.length}</span></h3>
+      ${balanceHtml}`;
   };
   function logRem(id, ch) { S.logReminder(id, ch); setTimeout(() => route === 'reminders' && render(), 400); }
   function queueAll() {
-    const list = S.data.members.filter(m => { const s = memberStatus(m); return s.key === 'expiring' || (s.key === 'expired' && s.left >= -14); });
-    list.forEach(m => S.logReminder(m.id, 'email'));
-    toast(`${list.length} reminder emails queued`); render();
+    toast('Bulk email is not configured yet. Contact members individually using WhatsApp.');
   }
 
   // ---------- modals ----------
