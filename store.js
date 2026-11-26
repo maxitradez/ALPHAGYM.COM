@@ -11,7 +11,7 @@
     till: '',                   // Set the gym's verified M-Pesa till or paybill
     area: '',                    // Set the gym's verified location
     pin: '1234',                // Temporary local access PIN; replace with Supabase Auth
-    reminderDays: 3             // "expiring" window
+    reminderDays: 7             // "expiring" window
   };
 
   const ymd = d => { d = d instanceof Date ? d : new Date(d); return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
