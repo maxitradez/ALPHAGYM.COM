@@ -1,11 +1,11 @@
 {
-  "name": "Alpha Gym Management",
+  "name": "Alpha Gym Operations",
   "short_name": "Alpha Gym",
   "start_url": "app.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0b0d10",
-  "theme_color": "#0b0d10",
+  "background_color": "#f4f3ef",
+  "theme_color": "#122033",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
