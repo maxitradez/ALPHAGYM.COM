@@ -723,3 +723,10 @@ footer a{color:#e1f2bd}
   .mobile-menu.open .menu-panel{transform:translateY(0)}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+
+/* Mobile viewport clearance: let the final dashboard sections scroll
+   completely above the fixed navigation surface. */
+@media(max-width:899px){
+  body.app{padding-bottom:calc(184px + env(safe-area-inset-bottom))}
+}
