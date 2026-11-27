@@ -1061,30 +1061,10 @@
     if (currentRole === 'trainer' && !['home','classes','members','profile'].includes(route)) route = 'home';
     $('#view').innerHTML = V[route](); if (after[route]) after[route]();
     const visibleTabs = currentRole === 'trainer' ? TABS.filter(([r]) => ['home','classes','members','profile'].includes(r)) : TABS.filter(([r]) => r!=='staff' || currentRole==='owner');
-    const activeTab = visibleTabs.find(([r]) => r === route) || visibleTabs[0];
     const nav = $('#tabs');
     nav.classList.remove('open');
-    nav.innerHTML = `
-      <button class="menu-trigger" type="button" onclick="toggleNavMenu()" aria-expanded="false" aria-controls="nav-panel" aria-label="Open navigation menu">
-        <span class="menu-trigger-icon" aria-hidden="true">☰</span>
-        <span class="menu-trigger-copy"><b>Menu</b><small>Go to a section</small></span>
-        <span class="menu-current">${esc(activeTab?.[2] || 'Home')}</span>
-        <span class="menu-chevron" aria-hidden="true">⌃</span>
-      </button>
-      <div class="menu-backdrop" onclick="closeNavMenu()" aria-hidden="true"></div>
-      <div class="menu-panel" id="nav-panel" role="group" aria-label="Main navigation">
-        <div class="menu-head">
-          <div><b>Navigation</b><small>Choose a section</small></div>
-          <button type="button" class="menu-close" onclick="closeNavMenu()" aria-label="Close navigation menu">×</button>
-        </div>
-        <div class="menu-grid">${visibleTabs.map(([r, icon, label]) => `
-          <button type="button" class="menu-item ${r === route ? 'on' : ''}" onclick="go('${r}')" ${r === route ? 'aria-current="page"' : ''}>
-            <span class="menu-item-icon" aria-hidden="true">${icon}</span>
-            <span class="menu-item-label">${label}</span>
-            <span class="menu-item-arrow" aria-hidden="true">›</span>
-          </button>`).join('')}
-        </div>
-      </div>`;
+    nav.innerHTML = `<nav class="desk-rail" aria-label="Sections">${visibleTabs.map(([r, , label]) => `
+      <button type="button" class="desk-link ${r === route ? 'on' : ''}" onclick="go('${r}')" ${r === route ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
   }
   function toggleNavMenu() {
     const nav = $('#tabs');
