@@ -249,7 +249,7 @@
     if (canManage) updates.phone = ($('#profile-phone') || {}).value?.trim() || null;
     const newEmail = canManage ? ($('#profile-email') || {}).value?.trim() || '' : '';
     const currentEmail = String(currentUser?.email || currentProfile?.email || '').trim();
-    if (canManage && (!newEmail || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(newEmail))) {
+    if (canManage && (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail))) {
       toast('Enter a valid email address'); return;
     }
     const { data, error } = await db.from('profiles').update(updates).eq('id', currentUser.id)
