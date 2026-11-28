@@ -3,33 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#122033">
+<meta name="theme-color" content="#080808">
 <title>Alpha Gym | Membership operations</title>
 <meta name="description" content="Alpha Gym member website and membership portal.">
 <link rel="icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=40">
+<style>.logo img{display:block;width:190px;max-width:42vw;height:auto;max-height:48px;object-fit:contain}</style>
 </head>
 <body>
 <div class="nav"><div class="wrap">
-  <a class="logo" href="#top" id="logo"></a>
+  <a class="logo" href="#top" id="logo" aria-label="Alpha Gym home"><img src="logo.svg" alt="Alpha Gym — Strength, Discipline, Progress"></a>
   <nav><a class="hide" href="#plans">Memberships</a><a class="hide" href="#about">About</a><a class="hide" href="#contact">Contact</a><a class="btn sm" href="portal.html">Member Portal</a></nav>
 </div></div>
-
 <header class="hero" id="top"><div class="wrap">
   <div class="eyebrow" id="area"></div>
   <h1>Run the floor.<br><em>Keep the books.</em></h1>
   <p>Memberships, attendance, and member accounts for Alpha Gym. The same records your staff already use, presented as an operations desk.</p>
   <div class="cta"><a class="btn" href="#plans">Membership information</a><a class="btn ghost" href="portal.html">Member login</a></div>
 </div></header>
-
 <section id="plans"><div class="wrap">
   <div class="eyebrow">Memberships</div><h2>Current membership plans</h2>
   <div id="planGrid" class="grid"></div>
   <p class="mut" id="planNote" style="margin-top:16px;font-size:.88rem">Contact Alpha Gym for current membership options and pricing.</p>
 </div></section>
-
 <section id="about" style="background:var(--card)"><div class="wrap">
   <div class="eyebrow">Alpha Gym</div><h2>How the gym is organised</h2>
   <div class="grid">
@@ -38,19 +36,15 @@
     <div class="feat"><h3>Records</h3><p>Plans, payments, and visits stay in one ledger. Nothing about how they are stored has changed.</p></div>
   </div>
 </div></section>
-
 <section id="contact"><div class="wrap">
   <div class="eyebrow">Contact</div><h2>Get in touch with Alpha Gym</h2>
   <p class="mut">For location, opening hours, membership options and enquiries, please contact the gym directly.</p>
   <div class="cta" style="margin-top:20px"><a class="btn" href="portal.html">Open member portal</a></div>
 </div></section>
-
 <footer><div class="wrap"><span id="copy"></span><span><a href="portal.html">Member portal</a> · <a href="app.html">Management access</a></span></div></footer>
-
 <script src="store.js"></script>
 <script>
 const S = Store, C = S.CONFIG, esc = S.esc;
-document.getElementById('logo').innerHTML = esc(C.gym).replace(/^(\S+)/, '<span>$1</span>');
 document.getElementById('area').textContent = C.area;
 document.getElementById('copy').textContent = '© ' + new Date().getFullYear() + ' ' + C.gym;
 const planGrid = document.getElementById('planGrid');
